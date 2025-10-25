@@ -1,0 +1,41 @@
+# Node modules
+**/node_modules
+**/.vite
+**/dist
+
+# Python
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+**/.venv
+.venv
+
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test files
+**/test_*.py
+**/*_test.py
+
+# Documentation (already in image)
+*.md
+!README.md
+
+# Development
+.env
+.env.local

@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  langgraph-chatkit:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        - VITE_CHATKIT_API_DOMAIN_KEY=${VITE_CHATKIT_API_DOMAIN_KEY:-domain_pk_68fb64ee20288190943636b0dd461fda010641585abac21c}
+    container_name: langgraph-chatkit-integration
+    ports:
+      - "8080:80"
+    environment:
+      # Required: Your LangGraph API endpoint
+      - LANGGRAPH_API_URL=${LANGGRAPH_API_URL:-https://nbg-webapp-cc-lg-test-we-dev-01-axhqfbexe3eeerbn.westeurope-01.azurewebsites.net}
+
+      # Required: LangGraph assistant/graph ID
+      - LANGGRAPH_ASSISTANT_ID=${LANGGRAPH_ASSISTANT_ID:-agent}
+
+      # Required: ChatKit domain key for production
+      - VITE_LANGGRAPH_CHATKIT_API_DOMAIN_KEY=${VITE_LANGGRAPH_CHATKIT_API_DOMAIN_KEY:-domain_pk_68fb64ee20288190943636b0dd461fda010641585abac21c}
+
+      # Session secret key for user identification
+      - SESSION_SECRET_KEY=${SESSION_SECRET_KEY:-dev-secret-key-change-in-production}
+
+    restart: unless-stopped
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost/langgraph/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    networks:
+      - langgraph-network
+
+networks:
+  langgraph-network:
+    driver: bridge
