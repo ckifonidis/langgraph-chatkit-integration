@@ -125,18 +125,13 @@ def create_image_carousel(
         carousel_items.append(carousel_item)
 
     # Build the carousel container
-    # Wrap Row in Box with maxWidth to enable horizontal scrolling
+    # Use full-width Card with nowrap Row to enable horizontal scrolling
     carousel_content = [
-        Box(
-            maxWidth="100%",  # Constrain width to force Row overflow
-            children=[
-                Row(
-                    gap="md",
-                    wrap="nowrap" if scrollable else "wrap",
-                    padding={"x": "sm", "y": "sm"},
-                    children=carousel_items,
-                )
-            ],
+        Row(
+            gap="md",
+            wrap="nowrap" if scrollable else "wrap",
+            padding={"x": "sm", "y": "sm"},
+            children=carousel_items,
         )
     ]
 
@@ -147,7 +142,8 @@ def create_image_carousel(
             Text(value=title, size="lg", weight="bold", padding={"bottom": "sm"}),
         )
 
-    return Card(size="lg", padding="md", children=carousel_content)
+    # Use size="full" to constrain to viewport width and enable scrolling
+    return Card(size="full", padding="md", children=carousel_content)
 
 
 def create_yes_no_buttons(
