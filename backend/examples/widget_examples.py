@@ -4,7 +4,11 @@ Example widgets for testing the carousel and other custom components.
 Import and use these in your langgraph_chatkit_server.py to test widgets.
 """
 
-from .custom_widgets import create_image_carousel, create_yes_no_buttons
+from .custom_widgets import (
+    create_image_carousel,
+    create_yes_no_buttons,
+    create_detail_card,
+)
 
 
 # Example 1: Product Carousel
@@ -112,12 +116,79 @@ IMAGE_GALLERY_EXAMPLE = create_image_carousel(
 )
 
 
+# Example 5: Drilldown Product Carousel
+PRODUCT_DRILLDOWN_CAROUSEL = create_image_carousel(
+    title="Products (Click for Details)",
+    items=[
+        {
+            "id": "prod_1",
+            "image_url": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=300&fit=crop",
+            "title": "Wireless Headphones",
+            "description": "Premium sound quality",
+            "item_data": {
+                "title": "Wireless Headphones",
+                "image_url": "https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=800&h=600&fit=crop",
+                "price": "$299.99",
+                "stock": 24,
+                "rating": 4.8,
+                "reviews": 2847,
+                "brand": "AudioTech",
+                "color": "Matte Black",
+                "warranty": "2 years",
+                "full_description": "Premium wireless headphones featuring active noise cancellation, 40-hour battery life, and studio-quality sound. Comfortable over-ear design with memory foam cushions. Includes carrying case and audio cable for wired use.",
+            },
+        },
+        {
+            "id": "prod_2",
+            "image_url": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=400&h=300&fit=crop",
+            "title": "Smart Watch",
+            "description": "Track your fitness",
+            "item_data": {
+                "title": "Smart Watch Pro",
+                "image_url": "https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&h=600&fit=crop",
+                "price": "$399.99",
+                "stock": 12,
+                "rating": 4.6,
+                "reviews": 1523,
+                "brand": "TechFit",
+                "color": "Space Gray",
+                "battery_life": "7 days",
+                "water_resistance": "50m",
+                "full_description": "Advanced smartwatch with comprehensive health monitoring, GPS tracking, and seamless smartphone integration. Features include heart rate monitoring, sleep tracking, workout detection, and mobile payments.",
+            },
+        },
+        {
+            "id": "prod_3",
+            "image_url": "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=300&fit=crop",
+            "title": "Designer Sunglasses",
+            "description": "UV protection with style",
+            "item_data": {
+                "title": "Designer Sunglasses",
+                "image_url": "https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=800&h=600&fit=crop",
+                "price": "$189.99",
+                "stock": 8,
+                "rating": 4.9,
+                "reviews": 892,
+                "brand": "LuxVision",
+                "frame_material": "Titanium",
+                "lens_type": "Polarized",
+                "uv_protection": "100% UV400",
+                "full_description": "Handcrafted designer sunglasses with titanium frame and polarized lenses. Offers superior UV protection while maintaining exceptional clarity. Includes premium case and cleaning cloth.",
+            },
+        },
+    ],
+    enable_drilldown=True,
+    scrollable=True,
+)
+
+
 def get_example_widget(widget_name: str):
     """
     Get an example widget by name.
 
     Available widgets:
-    - "products" - Product carousel
+    - "products" - Product carousel with external links
+    - "products_drilldown" - Product carousel with drilldown details
     - "blog" - Blog posts carousel
     - "yes_no" - Yes/no buttons
     - "gallery" - Image gallery
@@ -128,6 +199,7 @@ def get_example_widget(widget_name: str):
     """
     widgets = {
         "products": PRODUCT_CAROUSEL_EXAMPLE,
+        "products_drilldown": PRODUCT_DRILLDOWN_CAROUSEL,
         "blog": BLOG_CAROUSEL_EXAMPLE,
         "yes_no": YES_NO_EXAMPLE,
         "gallery": IMAGE_GALLERY_EXAMPLE,
