@@ -12,10 +12,8 @@ from fastapi.responses import Response, StreamingResponse
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import JSONResponse
 
-from .langgraph_chatkit_server import (
-    LangGraphChatKitServer,
-    create_langgraph_chatkit_server,
-)
+from chatkit_langgraph import LangGraphChatKitServer, create_server_from_env
+from examples.carousel_handler import CarouselWidgetHandler
 
 app = FastAPI(title="LangGraph ChatKit Integration API")
 
@@ -39,8 +37,12 @@ app.add_middleware(
     https_only=False,  # Set to True in production with HTTPS
 )
 
-# Initialize the server
-_langgraph_server: LangGraphChatKitServer | None = create_langgraph_chatkit_server()
+# Initialize the server with custom handlers
+_langgraph_server: LangGraphChatKitServer | None = create_server_from_env(
+    message_handlers=[
+        CarouselWidgetHandler()  # Demo: Shows carousel when user asks for products
+    ]
+)
 
 
 def get_langgraph_server() -> LangGraphChatKitServer:

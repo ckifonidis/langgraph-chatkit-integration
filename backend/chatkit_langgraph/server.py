@@ -1,8 +1,8 @@
 """
-LangGraph ChatKit Server - Adapter for integrating LangGraph API with ChatKit.
+LangGraph ChatKit Server - Extensible adapter for LangGraph API with ChatKit.
 
 This module provides a ChatKit server implementation that uses LangGraph API
-instead of OpenAI Agents SDK for generating responses.
+for generating responses, with hooks for custom message handling.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
+from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Any, AsyncIterator
 from uuid import uuid4
@@ -24,13 +25,11 @@ from chatkit.types import (
     ThreadMetadata,
     ThreadStreamEvent,
     UserMessageItem,
-    WidgetItem,
 )
 from openai.types.responses import ResponseInputContentParam
 
-from .langgraph_client import LangGraphStreamClient
-from .memory_store import MemoryStore
-from .widget_examples import get_example_widget
+from .client import LangGraphStreamClient
+from .store import MemoryStore
 
 logger = logging.getLogger(__name__)
 
@@ -55,43 +54,115 @@ def _is_tool_completion_item(item: Any) -> bool:
     return isinstance(item, ClientToolCallItem)
 
 
+class MessageHandler(ABC):
+    """
+    Abstract base class for custom message handlers.
+
+    Implement this to add custom logic before LangGraph processing,
+    such as widget triggers, special commands, or routing logic.
+    """
+
+    @abstractmethod
+    async def should_handle(
+        self,
+        user_message: str,
+        thread: ThreadMetadata,
+        context: dict[str, Any]
+    ) -> bool:
+        """
+        Determine if this handler should process the message.
+
+        Args:
+            user_message: The user's message text
+            thread: ChatKit thread metadata
+            context: Request context
+
+        Returns:
+            True if this handler should process the message
+        """
+        pass
+
+    @abstractmethod
+    async def handle(
+        self,
+        user_message: str,
+        thread: ThreadMetadata,
+        context: dict[str, Any],
+    ) -> AsyncIterator[ThreadStreamEvent]:
+        """
+        Handle the message and yield ChatKit events.
+
+        Args:
+            user_message: The user's message text
+            thread: ChatKit thread metadata
+            context: Request context
+
+        Yields:
+            ChatKit thread stream events
+        """
+        pass
+
+
 class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
     """
     ChatKit server implementation using LangGraph API.
 
     This server:
-    - Replaces OpenAI Agents SDK with LangGraph API calls
+    - Integrates LangGraph API with ChatKit protocol
     - Converts LangGraph streaming events to ChatKit format
-    - Maintains conversation history in MemoryStore
-    - Supports thread persistence across messages
+    - Maintains conversation history via Store interface
+    - Supports extensible message handlers for custom logic
+    - Provides thread persistence across messages
+
+    Example:
+        ```python
+        server = LangGraphChatKitServer(
+            langgraph_url="https://your-api.com",
+            assistant_id="your-assistant",
+            message_handlers=[CustomWidgetHandler()]
+        )
+        ```
     """
 
     def __init__(
         self,
-        langgraph_url: str | None = None,
-        assistant_id: str | None = None,
+        langgraph_url: str,
+        assistant_id: str,
+        store: MemoryStore | None = None,
+        message_handlers: list[MessageHandler] | None = None,
+        timeout: float = 60.0,
     ) -> None:
         """
         Initialize the LangGraph ChatKit server.
 
         Args:
-            langgraph_url: Base URL of LangGraph API (or from LANGGRAPH_API_URL env var)
-            assistant_id: LangGraph assistant/graph ID (or from LANGGRAPH_ASSISTANT_ID env var)
+            langgraph_url: Base URL of LangGraph API (required)
+            assistant_id: LangGraph assistant/graph ID (required)
+            store: ChatKit store implementation (defaults to MemoryStore)
+            message_handlers: List of custom message handlers (optional)
+            timeout: Request timeout in seconds (default: 60.0)
+
+        Raises:
+            ValueError: If langgraph_url or assistant_id is not provided
         """
-        self.store: MemoryStore = MemoryStore()
+        if not langgraph_url:
+            raise ValueError("langgraph_url is required")
+        if not assistant_id:
+            raise ValueError("assistant_id is required")
+
+        self.store = store or MemoryStore()
         super().__init__(self.store)
 
-        # Get configuration from environment or parameters
-        self.langgraph_url = langgraph_url or os.getenv(
-            "LANGGRAPH_API_URL",
-            "https://nbg-webapp-cc-lg-test-we-dev-01-axhqfbexe3eeerbn.westeurope-01.azurewebsites.net",
-        )
-        self.assistant_id = assistant_id or os.getenv("LANGGRAPH_ASSISTANT_ID", "agent")
+        self.langgraph_url = langgraph_url
+        self.assistant_id = assistant_id
+        self.message_handlers = message_handlers or []
+        self.timeout = timeout
 
         # Initialize LangGraph client
         self.langgraph_client = LangGraphStreamClient(
             base_url=self.langgraph_url,
             assistant_id=self.assistant_id,
+            timeout=self.timeout,
         )
 
         logger.info(
@@ -99,6 +170,7 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
             extra={
                 "langgraph_url": self.langgraph_url,
                 "assistant_id": self.assistant_id,
+                "num_handlers": len(self.message_handlers),
             },
         )
 
@@ -109,19 +181,19 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
         context: dict[str, Any],
     ) -> AsyncIterator[ThreadStreamEvent]:
         """
-        Generate a response using LangGraph API.
+        Generate a response using LangGraph API or custom handlers.
 
         This method:
-        1. Extracts user message from ChatKit item
-        2. Streams response from LangGraph API
-        3. Buffers events until final AI response
+        1. Checks custom message handlers first
+        2. Falls back to LangGraph API if no handler claims the message
+        3. Streams response from LangGraph API
         4. Converts final response to ChatKit format
         5. Yields ChatKit stream events
 
         Args:
             thread: ChatKit thread metadata
             item: User message item (or None for retry)
-            context: Request context
+            context: Request context (includes user_id)
 
         Yields:
             ChatKit thread stream events
@@ -149,37 +221,37 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
             extra={"message_preview": user_message[:100]},
         )
 
-        # Check for carousel trigger keywords
-        user_message_lower = user_message.lower()
-        if "carousel" in user_message_lower or "show products" in user_message_lower or "show me products" in user_message_lower:
-            # Yield intro text message
-            intro_msg_id = _gen_id("msg")
-            intro_item = AssistantMessageItem(
-                id=intro_msg_id,
-                thread_id=thread.id,
-                created_at=datetime.now(),
-                content=[AssistantMessageContent(
-                    text="Here are some featured items for you to explore:"
-                )],
-                status="completed",
-            )
-            yield ThreadItemDoneEvent(item=intro_item)
+        # Check custom message handlers first
+        for handler in self.message_handlers:
+            if await handler.should_handle(user_message, thread, context):
+                logger.info(f"Message handled by {handler.__class__.__name__}")
+                async for event in handler.handle(user_message, thread, context):
+                    yield event
+                return
 
-            # Yield the carousel widget
-            carousel_widget = get_example_widget("products")
-            widget_id = _gen_id("widget")
-            widget_item = WidgetItem(
-                id=widget_id,
-                thread_id=thread.id,
-                created_at=datetime.now(),
-                widget=carousel_widget,
-                status="completed",
-            )
-            yield ThreadItemDoneEvent(item=widget_item)
+        # No custom handler claimed the message, use LangGraph
+        async for event in self._handle_with_langgraph(
+            user_message, thread, context
+        ):
+            yield event
 
-            logger.info(f"Yielded carousel widget for thread {thread.id}")
-            return
+    async def _handle_with_langgraph(
+        self,
+        user_message: str,
+        thread: ThreadMetadata,
+        context: dict[str, Any],
+    ) -> AsyncIterator[ThreadStreamEvent]:
+        """
+        Handle message using LangGraph API.
 
+        Args:
+            user_message: User's message text
+            thread: ChatKit thread metadata
+            context: Request context
+
+        Yields:
+            ChatKit thread stream events
+        """
         # Validate thread ID format for LangGraph (must be UUID)
         langgraph_thread_id = thread.id
         try:
@@ -187,11 +259,13 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
             uuid.UUID(thread.id)
         except ValueError:
             # If not a valid UUID, generate a new one
-            # This can happen with ChatKit's default thread IDs
             langgraph_thread_id = str(uuid4())
             logger.info(
                 f"Generated new UUID for LangGraph thread",
-                extra={"chatkit_thread_id": thread.id, "langgraph_thread_id": langgraph_thread_id},
+                extra={
+                    "chatkit_thread_id": thread.id,
+                    "langgraph_thread_id": langgraph_thread_id,
+                },
             )
 
         # Buffer to collect final response
@@ -284,43 +358,68 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
             )
             yield ThreadItemDoneEvent(item=error_item)
 
-        return
-
-    async def to_message_content(self, _input: Attachment) -> ResponseInputContentParam:
+    async def to_message_content(
+        self, _input: Attachment
+    ) -> ResponseInputContentParam:
         """
         Convert file attachments to message content.
 
-        Note: File attachments are not supported in this demo.
+        Note: Override this method to add file attachment support.
         """
-        raise RuntimeError("File attachments are not supported in this demo.")
+        raise RuntimeError(
+            "File attachments are not supported by default. "
+            "Override to_message_content() to add attachment support."
+        )
 
     async def _latest_thread_item(
         self, thread: ThreadMetadata, context: dict[str, Any]
     ) -> ThreadItem | None:
         """Get the latest item from a thread."""
         try:
-            items = await self.store.load_thread_items(thread.id, None, 1, "desc", context)
+            items = await self.store.load_thread_items(
+                thread.id, None, 1, "desc", context
+            )
         except Exception:  # pragma: no cover - defensive
             return None
 
         return items.data[0] if getattr(items, "data", None) else None
 
 
-def create_langgraph_chatkit_server(
-    langgraph_url: str | None = None,
-    assistant_id: str | None = None,
+def create_server_from_env(
+    store: MemoryStore | None = None,
+    message_handlers: list[MessageHandler] | None = None,
 ) -> LangGraphChatKitServer:
     """
-    Factory function to create a LangGraph ChatKit server.
+    Create a LangGraph ChatKit server from environment variables.
+
+    Reads configuration from:
+    - LANGGRAPH_API_URL: LangGraph API base URL
+    - LANGGRAPH_ASSISTANT_ID: LangGraph assistant/graph ID
+    - LANGGRAPH_TIMEOUT: Request timeout (optional, default: 60.0)
 
     Args:
-        langgraph_url: Base URL of LangGraph API
-        assistant_id: LangGraph assistant/graph ID
+        store: ChatKit store implementation (defaults to MemoryStore)
+        message_handlers: List of custom message handlers (optional)
 
     Returns:
         Configured LangGraphChatKitServer instance
+
+    Raises:
+        ValueError: If required environment variables are missing
     """
+    langgraph_url = os.getenv("LANGGRAPH_API_URL")
+    assistant_id = os.getenv("LANGGRAPH_ASSISTANT_ID")
+    timeout = float(os.getenv("LANGGRAPH_TIMEOUT", "60.0"))
+
+    if not langgraph_url:
+        raise ValueError("LANGGRAPH_API_URL environment variable is required")
+    if not assistant_id:
+        raise ValueError("LANGGRAPH_ASSISTANT_ID environment variable is required")
+
     return LangGraphChatKitServer(
         langgraph_url=langgraph_url,
         assistant_id=assistant_id,
+        store=store,
+        message_handlers=message_handlers,
+        timeout=timeout,
     )
