@@ -37,6 +37,8 @@ WORKDIR /app
 # Copy backend files
 COPY backend/pyproject.toml ./backend/
 COPY backend/app ./backend/app/
+COPY backend/chatkit_langgraph ./backend/chatkit_langgraph/
+COPY backend/examples ./backend/examples/
 
 # Install backend dependencies using pip
 WORKDIR /app/backend
