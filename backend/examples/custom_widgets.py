@@ -125,12 +125,18 @@ def create_image_carousel(
         carousel_items.append(carousel_item)
 
     # Build the carousel container
+    # Wrap Row in Box with maxWidth to enable horizontal scrolling
     carousel_content = [
-        Row(
-            gap="md",
-            wrap="nowrap" if scrollable else "wrap",
-            padding={"x": "sm", "y": "sm"},
-            children=carousel_items,
+        Box(
+            maxWidth="100%",  # Constrain width to force Row overflow
+            children=[
+                Row(
+                    gap="md",
+                    wrap="nowrap" if scrollable else "wrap",
+                    padding={"x": "sm", "y": "sm"},
+                    children=carousel_items,
+                )
+            ],
         )
     ]
 
