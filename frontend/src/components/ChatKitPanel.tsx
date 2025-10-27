@@ -52,6 +52,30 @@ export function ChatKitPanel({
     threadItemActions: {
       feedback: false,
     },
+    widgets: {
+      async onAction(action, widgetItem) {
+        if (import.meta.env.DEV) {
+          console.debug("[ChatKitPanel] widget.action", action);
+        }
+
+        // Handle carousel item clicks
+        if (action.type === "carousel_item_click" || action.type === "open_link") {
+          const linkUrl = action.payload?.link_url;
+          if (linkUrl) {
+            window.open(linkUrl, "_blank", "noopener,noreferrer");
+            return;
+          }
+        }
+
+        // Handle other widget actions here
+        if (action.type === "user_confirmation") {
+          const answer = action.payload?.answer;
+          console.log("User answered:", answer);
+          // You can trigger additional actions based on the answer
+          return;
+        }
+      },
+    },
     onClientTool: async (invocation) => {
       if (invocation.name === "switch_theme") {
         const requested = invocation.params.theme;

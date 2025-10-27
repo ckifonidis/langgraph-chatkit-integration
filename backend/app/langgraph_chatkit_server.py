@@ -24,11 +24,13 @@ from chatkit.types import (
     ThreadMetadata,
     ThreadStreamEvent,
     UserMessageItem,
+    WidgetItem,
 )
 from openai.types.responses import ResponseInputContentParam
 
 from .langgraph_client import LangGraphStreamClient
 from .memory_store import MemoryStore
+from .widget_examples import get_example_widget
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +148,37 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
             f"Processing message for thread {thread.id}",
             extra={"message_preview": user_message[:100]},
         )
+
+        # Check for carousel trigger keywords
+        user_message_lower = user_message.lower()
+        if "carousel" in user_message_lower or "show products" in user_message_lower or "show me products" in user_message_lower:
+            # Yield intro text message
+            intro_msg_id = _gen_id("msg")
+            intro_item = AssistantMessageItem(
+                id=intro_msg_id,
+                thread_id=thread.id,
+                created_at=datetime.now(),
+                content=[AssistantMessageContent(
+                    text="Here are some featured items for you to explore:"
+                )],
+                status="completed",
+            )
+            yield ThreadItemDoneEvent(item=intro_item)
+
+            # Yield the carousel widget
+            carousel_widget = get_example_widget("products")
+            widget_id = _gen_id("widget")
+            widget_item = WidgetItem(
+                id=widget_id,
+                thread_id=thread.id,
+                created_at=datetime.now(),
+                widget=carousel_widget,
+                status="completed",
+            )
+            yield ThreadItemDoneEvent(item=widget_item)
+
+            logger.info(f"Yielded carousel widget for thread {thread.id}")
+            return
 
         # Validate thread ID format for LangGraph (must be UUID)
         langgraph_thread_id = thread.id
