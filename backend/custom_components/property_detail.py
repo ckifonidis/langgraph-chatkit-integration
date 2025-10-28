@@ -72,7 +72,7 @@ def create_property_detail_card(property_data: dict[str, Any]) -> Card:
                 ),
                 Button(
                     label="Close",
-                    iconStart="close",
+                    iconStart="chevron-left",
                     size="sm",
                     variant="ghost",
                     onClickAction=ActionConfig(
@@ -264,98 +264,3 @@ def create_property_detail_card(property_data: dict[str, Any]) -> Card:
         radius="xl",
         children=children,
     )
-
-
-class PropertyCarouselComponent(CustomComponent):
-    """Component that renders property search results as a carousel."""
-
-    def __init__(self, max_items: int = 20):
-        """
-        Initialize the property carousel component.
-
-        Args:
-            max_items: Maximum number of properties to show (default: 20)
-        """
-        self.max_items = max_items
-
-    def check_rules(self, response_data: dict[str, Any]) -> bool:
-        """
-        Check if property results exist.
-
-        Returns True if:
-        - response_data contains "query_results"
-        - query_results is a non-empty list
-        """
-        query_results = response_data.get("query_results", [])
-        return isinstance(query_results, list) and len(query_results) > 0
-
-    def render(self, response_data: dict[str, Any]) -> Card | None:
-        """
-        Create property carousel from query results.
-
-        Returns:
-            Carousel widget showing properties with drilldown capability
-        """
-        try:
-            properties = response_data.get("query_results", [])
-            total_count = len(properties)
-            display_properties = properties[:self.max_items]
-
-            # Convert to carousel items
-            items = []
-            for prop in display_properties:
-                # Format price
-                price = prop.get("price", 0)
-                price_str = f"€{price:,}" if price else "Contact for price"
-
-                # Build description
-                area = prop.get("propertyArea", "")
-                rooms = prop.get("numberOfRooms", "")
-                bathrooms = prop.get("numberOfBathrooms", "")
-
-                desc_parts = [price_str]
-                if area:
-                    desc_parts.append(f"{area}sqm")
-                if rooms:
-                    desc_parts.append(f"{rooms} bed")
-                if bathrooms:
-                    desc_parts.append(f"{bathrooms} bath")
-
-                # Add location
-                address = prop.get("address", {})
-                prefecture = address.get("prefecture", "")
-                if prefecture:
-                    desc_parts.append(f"📍 {prefecture}")
-
-                items.append({
-                    "id": prop.get("code", prop.get("id", "")),
-                    "image_url": prop.get("defaultImagePath", ""),
-                    "title": prop.get("title", "Property"),
-                    "description": " • ".join(desc_parts),
-                    "item_data": prop,
-                })
-
-            # Create title
-            title = f"Found {total_count} Properties"
-            if total_count > self.max_items:
-                title += f" (showing {self.max_items})"
-
-            # Render carousel
-            return create_image_carousel(
-                title=title,
-                items=items,
-                enable_drilldown=True,
-                scrollable=True,
-            )
-
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).error(
-                f"Failed to render property carousel: {e}",
-                exc_info=True
-            )
-            return None
-
-    def get_priority(self) -> int:
-        """Medium priority - render after text but before optional components."""
-        return 50

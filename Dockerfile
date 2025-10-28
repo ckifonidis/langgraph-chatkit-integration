@@ -5,6 +5,7 @@ FROM node:20-alpine AS frontend-builder
 # Build arguments for frontend configuration
 ARG VITE_CHATKIT_API_DOMAIN_KEY=domain_pk_68fb64ee20288190943636b0dd461fda010641585abac21c
 ARG VITE_CHATKIT_API_URL=/langgraph/chatkit
+ARG VITE_GOOGLE_MAPS_API_KEY
 
 WORKDIR /app/frontend
 
@@ -20,6 +21,7 @@ COPY frontend/ ./
 # Build frontend for production with environment variables
 RUN VITE_CHATKIT_API_DOMAIN_KEY=$VITE_CHATKIT_API_DOMAIN_KEY \
     VITE_CHATKIT_API_URL=$VITE_CHATKIT_API_URL \
+    VITE_GOOGLE_MAPS_API_KEY=$VITE_GOOGLE_MAPS_API_KEY \
     npm run build
 
 # Stage 2: Backend + Nginx
@@ -38,6 +40,7 @@ WORKDIR /app
 COPY backend/pyproject.toml ./backend/
 COPY backend/app ./backend/app/
 COPY backend/chatkit_langgraph ./backend/chatkit_langgraph/
+COPY backend/custom_components ./backend/custom_components/
 COPY backend/examples ./backend/examples/
 
 # Install backend dependencies using pip

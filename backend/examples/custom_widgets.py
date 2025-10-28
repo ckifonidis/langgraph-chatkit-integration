@@ -18,6 +18,9 @@ from chatkit.widgets import (
     Divider,
     Spacer,
     Badge,
+    ListView,
+    ListViewItem,
+    Icon,
 )
 from chatkit.actions import ActionConfig
 
@@ -79,41 +82,72 @@ def create_image_carousel(
     for item in items:
         item_id = item.get("id", item["title"])
 
-        # Build item content
+        # Build item content with professional spacing
         item_content = [
-            # Image
+            # Image - optimized size for better text visibility
             Image(
                 src=item["image_url"],
                 alt=item.get("title", "Image"),
-                height=180,
+                height=150,
                 fit="cover",
-                radius="md",
+                radius="lg",
                 flush=True,
             ),
-            # Title
+            # Title - property name
             Text(
                 value=item["title"],
                 size="md",
-                weight="semibold",
+                weight="bold",
                 truncate=True,
                 maxLines=2,
-                padding={"top": "sm"},
-            ),
-            # Description (if provided)
-            *(
-                [
-                    Caption(
-                        value=item.get("description", ""),
-                        size="sm",
-                        color="secondary",
-                        truncate=True,
-                        maxLines=2,
-                    )
-                ]
-                if item.get("description")
-                else []
+                padding={"top": "md", "bottom": "xs"},
             ),
         ]
+
+        # Add price prominently if available
+        if item.get("price"):
+            item_content.append(
+                Text(
+                    value=item["price"],
+                    size="xl",
+                    weight="bold",
+                    color="primary",
+                    padding={"bottom": "xs"},
+                )
+            )
+
+        # Add specs if available
+        if item.get("specs"):
+            item_content.append(
+                Caption(
+                    value=item["specs"],
+                    size="sm",
+                    color="secondary",
+                    padding={"bottom": "xs"},
+                )
+            )
+
+        # Add location if available
+        if item.get("location"):
+            item_content.append(
+                Caption(
+                    value=f"📍 {item['location']}",
+                    size="sm",
+                    color="secondary",
+                )
+            )
+
+        # Fallback: add description if no structured data
+        if not item.get("price") and not item.get("specs") and item.get("description"):
+            item_content.append(
+                Caption(
+                    value=item.get("description", ""),
+                    size="sm",
+                    color="secondary",
+                    truncate=True,
+                    maxLines=3,
+                )
+            )
 
         # Add action button if not using drilldown
         if not enable_drilldown and item.get("link_url"):
@@ -139,12 +173,15 @@ def create_image_carousel(
         # Create clickable wrapper if drilldown enabled
         if enable_drilldown:
             carousel_item = Box(
-                padding="md",
-                radius="lg",
-                border={"size": 1, "color": {"light": "#e5e7eb", "dark": "#374151"}},
+                padding="xl",
+                radius="xl",
+                border={"size": 1, "color": {"light": "#e0e7ee", "dark": "#3f4756"}},
                 background={"light": "#ffffff", "dark": "#1f2937"},
-                minWidth=220,
-                maxWidth=220,
+                shadow={"size": "sm", "color": {"light": "#00000010", "dark": "#00000030"}},
+                minWidth=280,
+                maxWidth=280,
+                transition="all 0.2s ease-in-out",
+                cursor="pointer",
                 onClickAction=ActionConfig(
                     type="view_item_details",
                     payload={
@@ -156,12 +193,13 @@ def create_image_carousel(
             )
         else:
             carousel_item = Box(
-                padding="md",
-                radius="lg",
-                border={"size": 1, "color": {"light": "#e5e7eb", "dark": "#374151"}},
+                padding="xl",
+                radius="xl",
+                border={"size": 1, "color": {"light": "#e0e7ee", "dark": "#3f4756"}},
                 background={"light": "#ffffff", "dark": "#1f2937"},
-                minWidth=220,
-                maxWidth=220,
+                shadow={"size": "sm", "color": {"light": "#00000010", "dark": "#00000030"}},
+                minWidth=280,
+                maxWidth=280,
                 children=item_content,
             )
 
@@ -174,9 +212,9 @@ def create_image_carousel(
             maxWidth="100%",  # Constrain width to force Row overflow
             children=[
                 Row(
-                    gap="md",
+                    gap="xl",
                     wrap="nowrap" if scrollable else "wrap",
-                    padding={"x": "sm", "y": "sm"},
+                    padding={"x": "lg", "y": "lg"},
                     children=carousel_items,
                 )
             ],
@@ -187,10 +225,129 @@ def create_image_carousel(
     if title:
         carousel_content.insert(
             0,
-            Text(value=title, size="lg", weight="bold", padding={"bottom": "sm"}),
+            Text(value=title, size="xl", weight="bold", padding={"bottom": "md", "top": "sm"}),
         )
 
     return Card(size="lg", padding="md", children=carousel_content)
+
+
+def create_property_listview(
+    items: List[Dict[str, Any]],
+    limit: int = 20,
+) -> ListView:
+    """
+    Create a professional property ListView following ChatKit best practices.
+
+    Each property item should have:
+    - id: Unique identifier
+    - image_url: Property image URL
+    - title: Property title/description
+    - price: Formatted price string (e.g., "€115,000")
+    - specs: Property specifications (e.g., "224sqm • 4 rooms • 1 bath")
+    - location: Location name
+    - item_data: Full property data for drilldown
+
+    Args:
+        items: List of property items
+        limit: Max items before "show more" (default: 20)
+
+    Returns:
+        ListView widget with property cards
+
+    Example:
+        >>> listview = create_property_listview(
+        ...     items=[{
+        ...         "id": "prop_1",
+        ...         "image_url": "https://example.com/property.jpg",
+        ...         "title": "Maisonette 224sqm, Nea Fokea",
+        ...         "price": "€115,000",
+        ...         "specs": "224sqm • 4 rooms • 1 bath",
+        ...         "location": "Nea Fokea",
+        ...         "item_data": {...}
+        ...     }],
+        ...     limit=20
+        ... )
+    """
+    list_items = []
+
+    for item in items:
+        item_id = item.get("id", "")
+
+        # Build property card content
+        property_content = [
+            Image(
+                src=item.get("image_url", ""),
+                alt=item.get("title", "Property"),
+                height=120,
+                fit="cover",
+                radius="lg",
+            ),
+            Col(
+                gap=1,
+                flex=1,
+                children=[
+                    # Title
+                    Text(
+                        value=item.get("title", "Property"),
+                        weight="semibold",
+                        size="sm",
+                        maxLines=2,
+                    ),
+                    # Price Badge - prominent display
+                    Badge(
+                        label=item.get("price", "Price on request"),
+                        color="success",
+                        size="md",
+                        variant="soft",
+                    ),
+                    # Specifications
+                    Caption(
+                        value=item.get("specs", ""),
+                        size="sm",
+                        color="secondary",
+                    ) if item.get("specs") else None,
+                    # Location with icon
+                    Row(
+                        gap=1,
+                        align="center",
+                        children=[
+                            Icon(name="map-pin", size="sm", color="secondary"),
+                            Caption(
+                                value=item.get("location", ""),
+                                size="sm",
+                                color="secondary",
+                            ),
+                        ],
+                    ) if item.get("location") else None,
+                ],
+            ),
+        ]
+
+        # Filter out None values
+        property_content = [child for child in property_content if child is not None]
+
+        # Create ListViewItem with click action (client-side handler for modal)
+        list_item = ListViewItem(
+            key=item_id,
+            gap=3,
+            align="stretch",
+            onClickAction=ActionConfig(
+                type="view_item_details",
+                handler="client",  # Handle on frontend to show modal
+                payload={
+                    "item_id": item_id,
+                    "item_data": item.get("item_data", item),
+                },
+            ),
+            children=property_content,
+        )
+
+        list_items.append(list_item)
+
+    return ListView(
+        children=list_items,
+        limit=limit,  # Built-in "show more" functionality
+    )
 
 
 def create_detail_card(

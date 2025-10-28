@@ -169,15 +169,10 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
             timeout=self.timeout,
         )
 
-        logger.info(
-            f"Initialized LangGraph ChatKit Server",
-            extra={
-                "langgraph_url": self.langgraph_url,
-                "assistant_id": self.assistant_id,
-                "num_handlers": len(self.message_handlers),
-                "has_component_registry": self.component_registry is not None,
-            },
-        )
+        # Map ChatKit thread IDs to LangGraph UUIDs
+        self._thread_id_map: dict[str, str] = {}
+
+        logger.info(f"LangGraph ChatKit Server initialized: {self.langgraph_url}")
 
     async def respond(
         self,
@@ -221,10 +216,7 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
             logger.warning("Empty user message")
             return
 
-        logger.info(
-            f"Processing message for thread {thread.id}",
-            extra={"message_preview": user_message[:100]},
-        )
+        print(f"[DEBUG] Message: thread={thread.id}, user={context.get('user_id', 'anon')[:8]}, msg={user_message[:50]}")
 
         # Check custom message handlers first
         for handler in self.message_handlers:
@@ -257,21 +249,10 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
         Yields:
             ChatKit thread stream events
         """
-        # Validate thread ID format for LangGraph (must be UUID)
-        langgraph_thread_id = thread.id
-        try:
-            # Try to parse as UUID to validate format
-            uuid.UUID(thread.id)
-        except ValueError:
-            # If not a valid UUID, generate a new one
-            langgraph_thread_id = str(uuid4())
-            logger.info(
-                f"Generated new UUID for LangGraph thread",
-                extra={
-                    "chatkit_thread_id": thread.id,
-                    "langgraph_thread_id": langgraph_thread_id,
-                },
-            )
+        # Map ChatKit thread ID to LangGraph UUID
+        # Simple: if mapping exists, reuse it; otherwise create new UUID
+        langgraph_thread_id = self._thread_id_map.setdefault(thread.id, str(uuid4()))
+        print(f"[DEBUG] Thread mapping: {thread.id} -> {langgraph_thread_id}")
 
         # Buffer to collect final response
         final_ai_message: dict[str, Any] | None = None
@@ -279,28 +260,38 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
 
         try:
             # Stream from LangGraph API
+            event_count = 0
             async for event in self.langgraph_client.stream_response(
                 thread_id=langgraph_thread_id,
                 user_message=user_message,
             ):
+                event_count += 1
+
                 # Skip metadata events
                 if self.langgraph_client.get_metadata_event(event):
                     continue
 
                 # Buffer the full event for component processing
                 final_event = event
+                print(f"[DEBUG] Event #{event_count} keys: {list(event.keys())[:5]}")
 
                 # Extract latest AI message
                 ai_msg = self.langgraph_client.extract_latest_ai_message(event)
                 if ai_msg:
                     final_ai_message = ai_msg
+                    print(f"[DEBUG] Found AI message in event #{event_count}")
 
                 # Check if this is the final response
                 if self.langgraph_client.is_final_response(event):
-                    logger.info("Final response detected")
+                    print(f"[DEBUG] Final response detected at event #{event_count}")
                     break
 
-            # If we have a final AI message, stream it as ChatKit events
+            print(f"[DEBUG] Processed {event_count} events total")
+
+            # Check if we have query results (property search response)
+            has_query_results = final_event and len(final_event.get("query_results", [])) > 0
+
+            # Handle response based on what we received
             if final_ai_message:
                 ai_content = final_ai_message.get("content", "")
 
@@ -320,20 +311,14 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
 
                 # Yield the completed message as a done event
                 yield ThreadItemDoneEvent(item=ai_message_item)
-
-                logger.info(
-                    f"Yielded AI response",
-                    extra={
-                        "thread_id": thread.id,
-                        "message_id": ai_message_id,
-                        "content_length": len(ai_content),
-                    },
-                )
+                print(f"[DEBUG] AI response: {len(ai_content)} chars")
 
                 # Check component registry for additional widgets to render
                 if self.component_registry and final_event:
-                    logger.debug("Checking component registry for widgets")
+                    print(f"[DEBUG] Checking components. Event keys: {list(final_event.keys())}")
+                    print(f"[DEBUG] Has query_results: {'query_results' in final_event}, count: {len(final_event.get('query_results', []))}")
                     widgets = self.component_registry.get_widgets(final_event)
+                    print(f"[DEBUG] Component registry returned {len(widgets)} widgets")
 
                     # Yield each widget that matched rules
                     for widget in widgets:
@@ -346,12 +331,44 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                             status="completed",
                         )
                         yield ThreadItemDoneEvent(item=widget_item)
-                        logger.info(
-                            f"Yielded component widget",
-                            extra={"widget_id": widget_id},
+                        print(f"[DEBUG] Yielded widget from component")
+
+            elif has_query_results:
+                # No AI message but we have query results - generate intro message
+                result_count = len(final_event.get("query_results", []))
+                intro_text = f"I found {result_count} properties matching your criteria:"
+
+                intro_msg_id = _gen_id("msg")
+                intro_item = AssistantMessageItem(
+                    id=intro_msg_id,
+                    thread_id=thread.id,
+                    created_at=datetime.now(),
+                    content=[AssistantMessageContent(text=intro_text)],
+                    status="completed",
+                )
+                yield ThreadItemDoneEvent(item=intro_item)
+                print(f"[DEBUG] Query results without AI message, showing {result_count} results")
+
+                # Check component registry for carousel widget
+                if self.component_registry and final_event:
+                    print(f"[DEBUG] Checking components for query results")
+                    widgets = self.component_registry.get_widgets(final_event)
+                    print(f"[DEBUG] Component registry returned {len(widgets)} widgets")
+
+                    for widget in widgets:
+                        widget_id = _gen_id("widget")
+                        widget_item = WidgetItem(
+                            id=widget_id,
+                            thread_id=thread.id,
+                            created_at=datetime.now(),
+                            widget=widget,
+                            status="completed",
                         )
+                        yield ThreadItemDoneEvent(item=widget_item)
+                        print(f"[DEBUG] Yielded carousel widget")
+
             else:
-                logger.warning("No AI message found in LangGraph response")
+                logger.warning("No AI message or query results found")
                 # Yield error message
                 error_msg_id = _gen_id("msg")
                 error_item = AssistantMessageItem(

@@ -109,8 +109,15 @@ class LangGraphStreamClient:
         url = f"{self.base_url}/threads/{thread_id}/runs/stream"
 
         # Prepare request payload
+        # Note: LangGraph expects "type": "human" not "role": "user"
         payload = {
-            "input": {"messages": [{"role": "user", "content": user_message}]},
+            "input": {
+                "messages": [{
+                    "type": "human",
+                    "content": user_message,
+                    "id": str(uuid4()),  # Include message ID
+                }]
+            },
             "stream_mode": [stream_mode],
             "assistant_id": self.assistant_id,
         }
@@ -118,14 +125,7 @@ class LangGraphStreamClient:
         if if_not_exists:
             payload["if_not_exists"] = if_not_exists
 
-        logger.info(
-            f"Streaming from LangGraph",
-            extra={
-                "thread_id": thread_id,
-                "assistant_id": self.assistant_id,
-                "stream_mode": stream_mode,
-            },
-        )
+        print(f"[DEBUG] LangGraph request: {url}")
 
         try:
             async with httpx.AsyncClient(timeout=self.timeout) as client:

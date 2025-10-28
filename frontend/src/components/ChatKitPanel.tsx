@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { ChatKit, useChatKit } from "@openai/chatkit-react";
 import {
   CHATKIT_API_URL,
@@ -9,6 +9,7 @@ import {
 } from "../lib/config";
 import type { FactAction } from "../hooks/useFacts";
 import type { ColorScheme } from "../hooks/useColorScheme";
+import { PropertyDetailModal } from "./PropertyDetailModal";
 
 type ChatKitPanelProps = {
   theme: ColorScheme;
@@ -24,6 +25,8 @@ export function ChatKitPanel({
   onThemeRequest,
 }: ChatKitPanelProps) {
   const processedFacts = useRef(new Set<string>());
+  const [selectedProperty, setSelectedProperty] = useState<any | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   const chatkit = useChatKit({
     api: { url: CHATKIT_API_URL, domainKey: CHATKIT_API_DOMAIN_KEY },
@@ -56,6 +59,16 @@ export function ChatKitPanel({
       async onAction(action, widgetItem) {
         if (import.meta.env.DEV) {
           console.debug("[ChatKitPanel] widget.action", action);
+        }
+
+        // Handle property detail modal
+        if (action.type === "view_item_details") {
+          const propertyData = action.payload?.item_data;
+          if (propertyData) {
+            setSelectedProperty(propertyData);
+            setIsModalOpen(true);
+          }
+          return;
         }
 
         // Handle carousel item clicks
@@ -119,8 +132,19 @@ export function ChatKitPanel({
   });
 
   return (
-    <div className="relative h-full w-full overflow-hidden border border-slate-200/60 bg-white shadow-card dark:border-slate-800/70 dark:bg-slate-900">
-      <ChatKit control={chatkit.control} className="block h-full w-full" />
-    </div>
+    <>
+      <div className="relative h-full w-full overflow-hidden border border-slate-200/60 bg-white shadow-card dark:border-slate-800/70 dark:bg-slate-900">
+        <ChatKit control={chatkit.control} className="block h-full w-full" />
+      </div>
+
+      <PropertyDetailModal
+        isOpen={isModalOpen}
+        onClose={() => {
+          setIsModalOpen(false);
+          setSelectedProperty(null);
+        }}
+        property={selectedProperty}
+      />
+    </>
   );
 }

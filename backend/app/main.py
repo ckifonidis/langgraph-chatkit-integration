@@ -3,7 +3,14 @@
 from __future__ import annotations
 
 import os
+import sys
+from pathlib import Path
 from typing import Any
+
+# Add backend directory to Python path for custom_components import
+backend_dir = Path(__file__).parent.parent
+if str(backend_dir) not in sys.path:
+    sys.path.insert(0, str(backend_dir))
 
 from chatkit.server import StreamingResult
 from fastapi import Depends, FastAPI, Request
