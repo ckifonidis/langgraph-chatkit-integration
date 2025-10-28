@@ -6,15 +6,9 @@ This component automatically renders when LangGraph returns property query resul
 
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 from typing import Any
 
 from chatkit.widgets import Card
-
-# Add parent directory to path to import examples
-sys.path.insert(0, str(Path(__file__).parent.parent))
-
 from examples.custom_widgets import create_image_carousel
 
 from .base import CustomComponent
