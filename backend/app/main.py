@@ -13,6 +13,8 @@ from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import JSONResponse
 
 from chatkit_langgraph import LangGraphChatKitServer, create_server_from_env
+from custom_components import ComponentRegistry
+from custom_components.property_carousel import PropertyCarouselComponent
 from examples.carousel_handler import CarouselWidgetHandler
 
 app = FastAPI(title="LangGraph ChatKit Integration API")
@@ -37,11 +39,16 @@ app.add_middleware(
     https_only=False,  # Set to True in production with HTTPS
 )
 
-# Initialize the server with custom handlers
+# Initialize component registry with custom components
+component_registry = ComponentRegistry()
+component_registry.register(PropertyCarouselComponent(max_items=20))
+
+# Initialize the server with custom handlers and components
 _langgraph_server: LangGraphChatKitServer | None = create_server_from_env(
     message_handlers=[
         CarouselWidgetHandler()  # Demo: Shows carousel when user asks for products
-    ]
+    ],
+    component_registry=component_registry,
 )
 
 

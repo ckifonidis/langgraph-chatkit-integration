@@ -25,6 +25,7 @@ from chatkit.types import (
     ThreadMetadata,
     ThreadStreamEvent,
     UserMessageItem,
+    WidgetItem,
 )
 from openai.types.responses import ResponseInputContentParam
 
@@ -130,6 +131,7 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
         assistant_id: str,
         store: MemoryStore | None = None,
         message_handlers: list[MessageHandler] | None = None,
+        component_registry: Any | None = None,
         timeout: float = 60.0,
     ) -> None:
         """
@@ -140,6 +142,7 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
             assistant_id: LangGraph assistant/graph ID (required)
             store: ChatKit store implementation (defaults to MemoryStore)
             message_handlers: List of custom message handlers (optional)
+            component_registry: ComponentRegistry for rule-based widgets (optional)
             timeout: Request timeout in seconds (default: 60.0)
 
         Raises:
@@ -156,6 +159,7 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
         self.langgraph_url = langgraph_url
         self.assistant_id = assistant_id
         self.message_handlers = message_handlers or []
+        self.component_registry = component_registry
         self.timeout = timeout
 
         # Initialize LangGraph client
@@ -171,6 +175,7 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                 "langgraph_url": self.langgraph_url,
                 "assistant_id": self.assistant_id,
                 "num_handlers": len(self.message_handlers),
+                "has_component_registry": self.component_registry is not None,
             },
         )
 
@@ -270,6 +275,7 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
 
         # Buffer to collect final response
         final_ai_message: dict[str, Any] | None = None
+        final_event: dict[str, Any] | None = None
 
         try:
             # Stream from LangGraph API
@@ -280,6 +286,9 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                 # Skip metadata events
                 if self.langgraph_client.get_metadata_event(event):
                     continue
+
+                # Buffer the full event for component processing
+                final_event = event
 
                 # Extract latest AI message
                 ai_msg = self.langgraph_client.extract_latest_ai_message(event)
@@ -320,6 +329,27 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                         "content_length": len(ai_content),
                     },
                 )
+
+                # Check component registry for additional widgets to render
+                if self.component_registry and final_event:
+                    logger.debug("Checking component registry for widgets")
+                    widgets = self.component_registry.get_widgets(final_event)
+
+                    # Yield each widget that matched rules
+                    for widget in widgets:
+                        widget_id = _gen_id("widget")
+                        widget_item = WidgetItem(
+                            id=widget_id,
+                            thread_id=thread.id,
+                            created_at=datetime.now(),
+                            widget=widget,
+                            status="completed",
+                        )
+                        yield ThreadItemDoneEvent(item=widget_item)
+                        logger.info(
+                            f"Yielded component widget",
+                            extra={"widget_id": widget_id},
+                        )
             else:
                 logger.warning("No AI message found in LangGraph response")
                 # Yield error message
@@ -358,6 +388,89 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
             )
             yield ThreadItemDoneEvent(item=error_item)
 
+    async def action(
+        self,
+        thread: ThreadMetadata,
+        action: Any,
+        sender: WidgetItem | None,
+        context: dict[str, Any],
+    ) -> AsyncIterator[ThreadStreamEvent]:
+        """
+        Handle widget actions.
+
+        This method is called when a user interacts with a widget
+        (e.g., clicks a button or carousel item).
+
+        Args:
+            thread: ChatKit thread metadata
+            action: Action object with type and payload
+            sender: The widget item that sent the action
+            context: Request context
+
+        Yields:
+            ChatKit thread stream events
+        """
+        logger.info(
+            f"Handling action: {action.type}",
+            extra={"thread_id": thread.id, "action_type": action.type},
+        )
+
+        # Handle view_item_details action (from property carousel drilldown)
+        if action.type == "view_item_details":
+            try:
+                # Import here to avoid circular dependency
+                from custom_components.property_detail import (
+                    create_property_detail_card,
+                )
+
+                # Get property data from action payload
+                property_data = action.payload.get("item_data", {})
+
+                if not property_data:
+                    logger.warning("No item_data in view_item_details action")
+                    return
+
+                # Create detail card widget
+                detail_widget = create_property_detail_card(property_data)
+
+                # Yield the detail widget
+                widget_id = _gen_id("widget")
+                widget_item = WidgetItem(
+                    id=widget_id,
+                    thread_id=thread.id,
+                    created_at=datetime.now(),
+                    widget=detail_widget,
+                    status="completed",
+                )
+
+                yield ThreadItemDoneEvent(item=widget_item)
+
+                logger.info(
+                    f"Yielded property detail widget",
+                    extra={
+                        "widget_id": widget_id,
+                        "property_code": property_data.get("code", "unknown"),
+                    },
+                )
+
+            except Exception as e:
+                logger.error(f"Error rendering property details: {e}", exc_info=True)
+
+                # Yield error message
+                error_msg_id = _gen_id("msg")
+                error_item = AssistantMessageItem(
+                    id=error_msg_id,
+                    thread_id=thread.id,
+                    created_at=datetime.now(),
+                    content=[
+                        AssistantMessageContent(
+                            text="Sorry, I couldn't load the property details. Please try again."
+                        )
+                    ],
+                    status="completed",
+                )
+                yield ThreadItemDoneEvent(item=error_item)
+
     async def to_message_content(
         self, _input: Attachment
     ) -> ResponseInputContentParam:
@@ -388,6 +501,7 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
 def create_server_from_env(
     store: MemoryStore | None = None,
     message_handlers: list[MessageHandler] | None = None,
+    component_registry: Any | None = None,
 ) -> LangGraphChatKitServer:
     """
     Create a LangGraph ChatKit server from environment variables.
@@ -400,6 +514,7 @@ def create_server_from_env(
     Args:
         store: ChatKit store implementation (defaults to MemoryStore)
         message_handlers: List of custom message handlers (optional)
+        component_registry: ComponentRegistry for rule-based widgets (optional)
 
     Returns:
         Configured LangGraphChatKitServer instance
@@ -421,5 +536,6 @@ def create_server_from_env(
         assistant_id=assistant_id,
         store=store,
         message_handlers=message_handlers,
+        component_registry=component_registry,
         timeout=timeout,
     )
