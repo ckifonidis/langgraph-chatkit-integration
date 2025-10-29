@@ -77,6 +77,7 @@ class PropertyCarouselComponent(CustomComponent):
                 area = prop.get("propertyArea", "")
                 rooms = prop.get("numberOfRooms", "")
                 bathrooms = prop.get("numberOfBathrooms", "")
+                floor = prop.get("floor", "")
 
                 spec_parts = []
                 if area:
@@ -85,8 +86,15 @@ class PropertyCarouselComponent(CustomComponent):
                     spec_parts.append(f"{rooms} rooms")
                 if bathrooms:
                     spec_parts.append(f"{bathrooms} bath")
+                if floor is not None and floor != "":
+                    # Format floor: "1" -> "Floor 1", non-numeric stays as-is
+                    floor_str = f"Floor {floor}" if str(floor).isdigit() else str(floor)
+                    spec_parts.append(floor_str)
 
                 specs_line = " • ".join(spec_parts)
+
+                # Extract description for preview
+                description = prop.get("description", "")
 
                 # Format location
                 address = prop.get("address", {})
@@ -99,6 +107,7 @@ class PropertyCarouselComponent(CustomComponent):
                     "title": prop.get("title", "Property"),
                     "price": price_str,      # Badge display
                     "specs": specs_line,     # Caption text
+                    "description": description,  # Description preview
                     "location": location,    # Location with icon
                     "item_data": prop,       # Full property data for drilldown
                 })

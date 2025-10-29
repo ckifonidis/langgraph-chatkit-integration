@@ -306,6 +306,14 @@ def create_property_listview(
                         size="sm",
                         color="secondary",
                     ) if item.get("specs") else None,
+                    # Description preview (first 2 lines with truncation)
+                    Caption(
+                        value=item.get("description", ""),
+                        size="sm",
+                        color="secondary",
+                        maxLines=2,
+                        truncate=True,
+                    ) if item.get("description") else None,
                     # Location with icon
                     Row(
                         gap=1,
