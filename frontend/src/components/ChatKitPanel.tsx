@@ -39,7 +39,7 @@ export function ChatKitPanel({
           shade: theme === "dark" ? -1 : -4,
         },
         accent: {
-          primary: theme === "dark" ? "#f1f5f9" : "#0f172a",
+          primary: "#00BA88", // Uniko green
           level: 1,
         },
       },

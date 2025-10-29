@@ -1,6 +1,13 @@
-import { Fragment } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Dialog, Transition } from "@headlessui/react";
 import { XMarkIcon, CheckIcon, XCircleIcon } from "@heroicons/react/24/outline";
+
+// Google Maps type declarations
+declare global {
+  interface Window {
+    google: any;
+  }
+}
 
 interface PropertyData {
   code?: string;
@@ -161,6 +168,26 @@ export function PropertyDetailModal({
   onClose,
   property,
 }: PropertyDetailModalProps) {
+  const [mapsLoaded, setMapsLoaded] = useState(false);
+
+  // Get API key
+  const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+
+  // Dynamically load Google Maps API
+  useEffect(() => {
+    if (window.google || !mapsApiKey) {
+      setMapsLoaded(true);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${mapsApiKey}&loading=async`;
+    script.async = true;
+    script.defer = true;
+    script.onload = () => setMapsLoaded(true);
+    document.head.appendChild(script);
+  }, [mapsApiKey]);
+
   if (!property) return null;
 
   const formatPrice = (price?: number) => {
@@ -181,9 +208,6 @@ export function PropertyDetailModal({
     lng = coords[0];
     lat = coords[1];
   }
-
-  // Google Maps API key from env
-  const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
   return (
     <Transition appear show={isOpen} as={Fragment}>
@@ -292,18 +316,37 @@ export function PropertyDetailModal({
                           )}
                         </div>
 
-                        {/* Embedded Google Map */}
-                        {lat && lng && mapsApiKey && (
-                          <div className="rounded-xl overflow-hidden border border-slate-200 dark:border-slate-700 shadow-lg">
-                            <iframe
-                              src={`https://www.google.com/maps/embed/v1/place?key=${mapsApiKey}&q=${lat},${lng}&zoom=15`}
-                              width="100%"
-                              height="350"
-                              style={{ border: 0 }}
-                              loading="lazy"
-                              referrerPolicy="no-referrer-when-downgrade"
-                              title="Property Location"
+                        {/* Embedded Google Map with Circle Range */}
+                        {lat && lng && mapsLoaded && (
+                          <div className="space-y-2">
+                            <div
+                              ref={(el) => {
+                                if (!el || !window.google) return;
+
+                                const map = new window.google.maps.Map(el, {
+                                  center: { lat, lng },
+                                  zoom: 14,
+                                  mapTypeControl: true,
+                                  streetViewControl: false,
+                                });
+
+                                new window.google.maps.Circle({
+                                  center: { lat, lng },
+                                  radius: 500, // 500 meters - same for all properties
+                                  strokeColor: '#00BA88',
+                                  strokeOpacity: 1,
+                                  strokeWeight: 2,
+                                  fillColor: '#00BA88',
+                                  fillOpacity: 0.25,
+                                  map: map,
+                                });
+                              }}
+                              className="w-full h-[350px] rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg"
                             />
+                            <p className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                              <span>📍</span>
+                              <span>Approximate location shown (500m radius) for privacy</span>
+                            </p>
                           </div>
                         )}
 

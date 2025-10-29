@@ -16,29 +16,29 @@ export const FACTS_API_URL = import.meta.env.VITE_FACTS_API_URL ?? "/facts";
 
 export const THEME_STORAGE_KEY = "chatkit-boilerplate-theme";
 
-export const GREETING = "LangGraph AI Assistant";
+export const GREETING = "Uniko Property Assistant";
 
 export const STARTER_PROMPTS: StartScreenPrompt[] = [
   {
-    label: "What can you help me with?",
-    prompt: "Hello! What can you help me with?",
-    icon: "circle-question",
-  },
-  {
-    label: "Banking services",
-    prompt: "What banking services do you offer?",
+    label: "Find properties in Athens",
+    prompt: "Show me properties for sale in Athens",
     icon: "search",
   },
   {
-    label: "Account help",
-    prompt: "I need help with my account",
-    icon: "book-open",
+    label: "Properties under €200,000",
+    prompt: "Find apartments under €200,000",
+    icon: "sparkle",
   },
   {
-    label: "Loan information",
-    prompt: "Tell me about loans",
-    icon: "sparkle",
+    label: "Properties near metro",
+    prompt: "Show me properties near metro stations",
+    icon: "maps",
+  },
+  {
+    label: "Buying process help",
+    prompt: "How does the property buying process work with Uniko?",
+    icon: "circle-question",
   },
 ];
 
-export const PLACEHOLDER_INPUT = "Ask me anything...";
+export const PLACEHOLDER_INPUT = "Search for properties or ask about real estate...";
