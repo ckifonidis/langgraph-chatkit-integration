@@ -328,6 +328,7 @@ export function PropertyDetailModal({
                                   zoom: 14,
                                   mapTypeControl: true,
                                   streetViewControl: false,
+                                  gestureHandling: 'cooperative',
                                 });
 
                                 new window.google.maps.Circle({
