@@ -286,47 +286,49 @@ def create_property_listview(
                 gap=1,
                 flex=1,
                 children=[
-                    # Title
-                    Text(
-                        value=item.get("title", "Property"),
-                        weight="semibold",
-                        size="sm",
-                        maxLines=2,
-                    ),
-                    # Price Badge - prominent display
-                    Badge(
-                        label=item.get("price", "Price on request"),
-                        color="success",
-                        size="md",
-                        variant="soft",
-                    ),
-                    # Specifications
-                    Caption(
-                        value=item.get("specs", ""),
-                        size="sm",
-                        color="secondary",
-                    ) if item.get("specs") else None,
-                    # Description preview (first 2 lines with truncation)
-                    Caption(
-                        value=item.get("description", ""),
-                        size="sm",
-                        color="secondary",
-                        maxLines=2,
-                        truncate=True,
-                    ) if item.get("description") else None,
-                    # Location with icon
-                    Row(
-                        gap=1,
-                        align="center",
-                        children=[
-                            Icon(name="map-pin", size="sm", color="secondary"),
-                            Caption(
-                                value=item.get("location", ""),
-                                size="sm",
-                                color="secondary",
-                            ),
-                        ],
-                    ) if item.get("location") else None,
+                    child for child in [
+                        # Title
+                        Text(
+                            value=item.get("title", "Property"),
+                            weight="semibold",
+                            size="sm",
+                            maxLines=2,
+                        ),
+                        # Price Badge - prominent display
+                        Badge(
+                            label=item.get("price", "Price on request"),
+                            color="success",
+                            size="md",
+                            variant="soft",
+                        ),
+                        # Specifications
+                        Caption(
+                            value=item.get("specs", ""),
+                            size="sm",
+                            color="secondary",
+                        ) if item.get("specs") else None,
+                        # Description preview (first 2 lines with truncation)
+                        Caption(
+                            value=item.get("description", ""),
+                            size="sm",
+                            color="secondary",
+                            maxLines=2,
+                            truncate=True,
+                        ) if item.get("description") else None,
+                        # Location with icon
+                        Row(
+                            gap=1,
+                            align="center",
+                            children=[
+                                Icon(name="map-pin", size="sm", color="secondary"),
+                                Caption(
+                                    value=item.get("location", ""),
+                                    size="sm",
+                                    color="secondary",
+                                ),
+                            ],
+                        ) if item.get("location") else None,
+                    ] if child is not None
                 ],
             ),
         ]
