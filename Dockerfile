@@ -41,7 +41,6 @@ COPY backend/pyproject.toml ./backend/
 COPY backend/app ./backend/app/
 COPY backend/chatkit_langgraph ./backend/chatkit_langgraph/
 COPY backend/custom_components ./backend/custom_components/
-COPY backend/examples ./backend/examples/
 
 # Install backend dependencies using pip
 WORKDIR /app/backend

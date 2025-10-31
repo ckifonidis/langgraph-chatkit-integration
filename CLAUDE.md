@@ -55,7 +55,6 @@ docker-compose up --build
 curl http://localhost:8004/langgraph/health
 
 # No automated test suite currently exists
-# Test file found: backend/test_e2e.py (may be outdated)
 ```
 
 ## Architecture
@@ -86,14 +85,9 @@ User → ChatKit React UI → FastAPI Backend → LangGraph API
 3. **`custom_components/`** - Rule-based widget rendering system
    - `base.py`: `CustomComponent` abstract base class
    - `__init__.py`: `ComponentRegistry` for managing components
-   - `property_carousel.py`: Auto-renders carousel when `query_results` exists
-   - `property_detail.py`: Detailed property view on drilldown
+   - `property_carousel.py`: Auto-renders ListView when `query_results` exists
+   - `widgets.py`: Reusable widget functions (`create_property_listview`, `create_favorite_button`, `create_hide_button`)
    - Components automatically activate based on LangGraph response structure
-
-4. **`examples/`** - Demonstration handlers and widgets
-   - `carousel_handler.py`: `CarouselWidgetHandler` - Demo message handler
-   - `custom_widgets.py`: Low-level widget builder functions
-   - `widget_examples.py`: Widget creation examples
 
 ### Key Design Patterns
 
@@ -181,6 +175,153 @@ All responses use Server-Sent Events (SSE) with `text/event-stream`.
 **Example Use Case:**
 PropertyCarouselComponent activates when response contains `query_results` array and automatically renders a horizontal scrollable carousel of properties.
 
+## User Preferences System
+
+The application includes a user preferences system that allows users to favorite and hide properties. Preferences are stored per-user session and persist for the session duration.
+
+### Architecture
+
+**Storage (`backend/chatkit_langgraph/store.py`):**
+- Preferences stored in `MemoryStore._preferences` dict: `{user_id: {favorites: [], hidden: [], version: 1}}`
+- Methods: `get_preferences()`, `add_favorite()`, `remove_favorite()`, `hide_property()`, `unhide_property()`
+
+**UI Components (`backend/custom_components/widgets.py`):**
+- `create_favorite_button()` - Star icon button (filled when favorited)
+- `create_hide_button()` - Eye-slash icon button
+- Both buttons emit server-side actions (no handler specified, defaults to server)
+
+**Action Handling (`backend/chatkit_langgraph/server.py`):**
+- `action()` method handles `toggle_favorite` and `hide_property` actions
+- Updates preferences silently (no immediate UI re-render)
+- Preferences are applied on next property search/query
+
+### How It Works
+
+**1. User Clicks Favorite Button:**
+```
+User clicks star → toggle_favorite action → server.action()
+                 ↓
+         Updates MemoryStore preferences
+                 ↓
+         No immediate response (silent update)
+                 ↓
+         Next search uses updated preferences
+```
+
+**2. Filtering Properties:**
+```python
+# In property_carousel.py render() method:
+properties = response_data.get("query_results", [])
+
+# Filter out hidden properties
+if user_preferences:
+    hidden = user_preferences.get('hidden', [])
+    if hidden:
+        properties = [
+            prop for prop in properties
+            if prop.get('code') not in hidden
+        ]
+
+# Display favorite status
+favorites = user_preferences.get('favorites', [])
+# Used to show filled/unfilled star icons
+```
+
+**3. Server-Side Flow:**
+```python
+# server.py action() method
+async def action(...) -> AsyncIterator[ThreadStreamEvent]:
+    user_id = context.get("user_id", "anonymous")
+
+    if action.type == "toggle_favorite":
+        property_code = action.payload.get("propertyCode")
+        prefs = self.store.get_preferences(user_id)
+        if property_code in prefs['favorites']:
+            self.store.remove_favorite(user_id, property_code)
+        else:
+            self.store.add_favorite(user_id, property_code)
+
+    # No events yielded - silent update
+```
+
+### Implementation Details
+
+**Button Configuration:**
+```python
+# Favorite button (widgets.py:645-673)
+Button(
+    label="",  # Icon only
+    iconStart="star-filled" if is_favorited else "star",
+    color="warning" if is_favorited else "secondary",
+    onClickAction=ActionConfig(
+        type="toggle_favorite",
+        payload={"propertyCode": property_code}
+        # No handler specified - defaults to server-side
+    )
+)
+
+# Hide button (widgets.py:676-700)
+Button(
+    label="",  # Icon only
+    iconStart="empty-circle",  # Substitute for eye-slash
+    color="secondary",
+    onClickAction=ActionConfig(
+        type="hide_property",
+        payload={"propertyCode": property_code}
+    )
+)
+```
+
+**User Preferences Structure:**
+```python
+{
+    'favorites': ['PROP001', 'PROP042', 'PROP123'],  # List of property codes
+    'hidden': ['PROP999'],                            # List of hidden property codes
+    'version': 1                                      # Schema version
+}
+```
+
+**Loading Preferences in Response Handler:**
+```python
+# server.py _handle_with_langgraph() method
+user_id = context.get("user_id", "anonymous")
+user_preferences = self.store.get_preferences(user_id)
+
+# Pass to component registry
+widgets = self.component_registry.get_widgets(
+    final_event,
+    user_preferences=user_preferences
+)
+```
+
+### Production Considerations
+
+**Current Implementation (MemoryStore):**
+- ⚠️ Preferences lost on server restart
+- ⚠️ Not shared across multiple server instances
+- ⚠️ No persistence beyond session lifetime
+
+**Production Requirements:**
+- Replace `MemoryStore` with persistent storage (PostgreSQL, Redis)
+- Store preferences in database table: `user_preferences(user_id, favorites_json, hidden_json, updated_at)`
+- Consider caching layer for frequently accessed preferences
+- Add preference export/import functionality
+- Implement preference limits (e.g., max 100 favorites)
+
+**Example Database Schema:**
+```sql
+CREATE TABLE user_preferences (
+    user_id VARCHAR(255) PRIMARY KEY,
+    favorites JSONB DEFAULT '[]'::jsonb,
+    hidden JSONB DEFAULT '[]'::jsonb,
+    version INTEGER DEFAULT 1,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX idx_user_preferences_user_id ON user_preferences(user_id);
+```
+
 ## Widget System
 
 ChatKit provides 25+ widget types that compose into rich UIs:
@@ -193,22 +334,29 @@ Widgets are created in Python backend using `chatkit.widgets` classes and automa
 ## Code Organization Principles
 
 1. **Backend modules** in `backend/` directory with Python path adjustments in `app/main.py`
-2. **Separation of concerns**: Core adapter (`chatkit_langgraph/`) vs application code (`app/`) vs extensions (`custom_components/`, `examples/`)
+2. **Separation of concerns**: Core adapter (`chatkit_langgraph/`) vs application code (`app/`) vs extensions (`custom_components/`)
 3. **Factory pattern**: Use `create_server_from_env()` for server initialization
 4. **Extension points**: Message handlers, component registry, widget actions
 5. **Thread isolation**: All thread operations filtered by `user_id` from session
+6. **User preferences**: Per-session favorites and hidden properties stored in MemoryStore
 
 ## Common Development Scenarios
 
 ### Adding a New Message Handler
-1. Create class inheriting from `MessageHandler` in `examples/` or `app/`
-2. Implement `can_handle()` and `handle()` methods
+1. Create class inheriting from `MessageHandler` in `app/` or new module
+2. Implement `should_handle()` and `handle()` methods
 3. Register in `app/main.py`: `create_server_from_env(message_handlers=[YourHandler()])`
 
 ### Adding Custom Widget Logic
 1. For keyword-triggered widgets → Use MessageHandler
 2. For response-based widgets → Use CustomComponent
-3. For reusable widget builders → Add to `examples/custom_widgets.py`
+3. For reusable widget builders → Add to `custom_components/widgets.py`
+
+### Working with User Preferences
+1. Get preferences: `user_preferences = self.store.get_preferences(user_id)`
+2. Update favorites: `self.store.add_favorite(user_id, property_code)` or `self.store.remove_favorite(user_id, property_code)`
+3. Hide/unhide properties: `self.store.hide_property(user_id, property_code)` or `self.store.unhide_property(user_id, property_code)`
+4. Filter results: Check `property_code not in user_preferences.get('hidden', [])` in component render methods
 
 ### Debugging Widget Issues
 - Check browser console for ChatKit validation errors
@@ -226,13 +374,16 @@ Typical structure: `{"messages": [...], "query_results": [...], "sql_query": {..
 
 ## Important File Locations
 
-- Backend entrypoint: `backend/app/main.py:69` (chatkit_endpoint)
-- Server initialization: `backend/app/main.py:54` (_langgraph_server)
-- Component registry: `backend/app/main.py:49-51`
-- LangGraph response handling: `backend/chatkit_langgraph/server.py` (respond method)
-- Widget action handling: `backend/chatkit_langgraph/server.py` (action method)
-- Thread storage: `backend/chatkit_langgraph/store.py`
-- Custom component base: `backend/custom_components/base.py`
+- Backend entrypoint: `backend/app/main.py` (chatkit_endpoint)
+- Server initialization: `backend/app/main.py` (_langgraph_server, component_registry)
+- LangGraph response handling: `backend/chatkit_langgraph/server.py` (respond method, _handle_with_langgraph method)
+- Widget action handling: `backend/chatkit_langgraph/server.py` (action method - handles toggle_favorite, hide_property)
+- Thread & preference storage: `backend/chatkit_langgraph/store.py` (MemoryStore class)
+- Custom component base: `backend/custom_components/base.py` (CustomComponent ABC)
+- Property carousel component: `backend/custom_components/property_carousel.py` (PropertyCarouselComponent)
+- Widget builders: `backend/custom_components/widgets.py` (create_property_listview, create_favorite_button, create_hide_button)
+- Frontend ChatKit panel: `frontend/src/components/ChatKitPanel.tsx` (widget action handlers, property detail modal)
+- Property detail modal: `frontend/src/components/PropertyDetailModal.tsx` (client-side property details)
 
 ## Production Considerations
 
@@ -250,4 +401,4 @@ Typical structure: `{"messages": [...], "query_results": [...], "sql_query": {..
 - `DOCUMENTATION.md` - Comprehensive guide (1200+ lines) covering protocol, widgets, best practices
 - `VERIFICATION_SUMMARY.md` - Implementation verification notes
 - `custom_components/README.md` - Complete component system guide
-- `examples/DRILLDOWN_USAGE.md` - Carousel drilldown feature guide
+- `CLAUDE.md` - This file - development guide and architecture overview

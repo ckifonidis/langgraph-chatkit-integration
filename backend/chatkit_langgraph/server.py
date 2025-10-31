@@ -430,12 +430,16 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
             context: Request context
 
         Yields:
-            ChatKit thread stream events
+            ChatKit thread stream events (none for preference updates)
         """
         logger.info(
             f"Handling action: {action.type}",
             extra={"thread_id": thread.id, "action_type": action.type},
         )
+
+        # Ensure this is recognized as an async generator
+        if False:
+            yield  # type: ignore
 
         # Get user ID from context
         user_id = context.get("user_id", "anonymous")
@@ -455,10 +459,9 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
 
                 # Preferences will be used on next search/query
                 print(f"[DEBUG] Updated preferences: {self.store.get_preferences(user_id)}")
-            return
 
         # Handle hide_property action
-        if action.type == "hide_property":
+        elif action.type == "hide_property":
             property_code = action.payload.get("propertyCode")
             if property_code:
                 # Update preferences silently (no immediate re-render)
@@ -467,63 +470,6 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
 
                 # Preferences will be used on next search/query
                 print(f"[DEBUG] Updated preferences: {self.store.get_preferences(user_id)}")
-            return
-
-        # Handle view_item_details action (from property carousel drilldown)
-        if action.type == "view_item_details":
-            try:
-                # Import here to avoid circular dependency
-                from custom_components.property_detail import (
-                    create_property_detail_card,
-                )
-
-                # Get property data from action payload
-                property_data = action.payload.get("item_data", {})
-
-                if not property_data:
-                    logger.warning("No item_data in view_item_details action")
-                    return
-
-                # Create detail card widget
-                detail_widget = create_property_detail_card(property_data)
-
-                # Yield the detail widget
-                widget_id = _gen_id("widget")
-                widget_item = WidgetItem(
-                    id=widget_id,
-                    thread_id=thread.id,
-                    created_at=datetime.now(),
-                    widget=detail_widget,
-                    status="completed",
-                )
-
-                yield ThreadItemDoneEvent(item=widget_item)
-
-                logger.info(
-                    f"Yielded property detail widget",
-                    extra={
-                        "widget_id": widget_id,
-                        "property_code": property_data.get("code", "unknown"),
-                    },
-                )
-
-            except Exception as e:
-                logger.error(f"Error rendering property details: {e}", exc_info=True)
-
-                # Yield error message
-                error_msg_id = _gen_id("msg")
-                error_item = AssistantMessageItem(
-                    id=error_msg_id,
-                    thread_id=thread.id,
-                    created_at=datetime.now(),
-                    content=[
-                        AssistantMessageContent(
-                            text="Sorry, I couldn't load the property details. Please try again."
-                        )
-                    ],
-                    status="completed",
-                )
-                yield ThreadItemDoneEvent(item=error_item)
 
     async def to_message_content(
         self, _input: Attachment

@@ -9,9 +9,9 @@ from __future__ import annotations
 from typing import Any
 
 from chatkit.widgets import ListView
-from examples.custom_widgets import create_property_listview
 
 from .base import CustomComponent
+from .widgets import create_property_listview
 
 
 class PropertyCarouselComponent(CustomComponent):

@@ -22,7 +22,6 @@ from starlette.responses import JSONResponse
 from chatkit_langgraph import LangGraphChatKitServer, create_server_from_env
 from custom_components import ComponentRegistry
 from custom_components.property_carousel import PropertyCarouselComponent
-from examples.carousel_handler import CarouselWidgetHandler
 
 app = FastAPI(title="LangGraph ChatKit Integration API")
 
@@ -50,11 +49,9 @@ app.add_middleware(
 component_registry = ComponentRegistry()
 component_registry.register(PropertyCarouselComponent(max_items=20))
 
-# Initialize the server with custom handlers and components
+# Initialize the server with custom components
 _langgraph_server: LangGraphChatKitServer | None = create_server_from_env(
-    message_handlers=[
-        CarouselWidgetHandler()  # Demo: Shows carousel when user asks for products
-    ],
+    message_handlers=[],
     component_registry=component_registry,
 )
 
@@ -114,6 +111,31 @@ async def health_check() -> dict[str, Any]:
     }
 
 
+@app.get("/langgraph/preferences")
+async def get_preferences(
+    request: Request,
+    server: LangGraphChatKitServer = Depends(get_langgraph_server),
+) -> dict[str, Any]:
+    """
+    Get user preferences (favorites and hidden properties).
+
+    Returns:
+        Dictionary with favorites list, hidden list, and version
+    """
+    # Get or create user session ID
+    if "user_id" not in request.session:
+        import uuid
+        request.session["user_id"] = str(uuid.uuid4())
+
+    user_id = request.session["user_id"]
+    preferences = server.store.get_preferences(user_id)
+
+    return {
+        "user_id": user_id[:8],  # Return truncated user_id for debugging
+        "preferences": preferences,
+    }
+
+
 @app.get("/")
 async def root() -> dict[str, str]:
     """Root endpoint with API information."""
@@ -122,4 +144,5 @@ async def root() -> dict[str, str]:
         "version": "0.1.0",
         "chatkit_endpoint": "/langgraph/chatkit",
         "health_endpoint": "/langgraph/health",
+        "preferences_endpoint": "/langgraph/preferences",
     }
