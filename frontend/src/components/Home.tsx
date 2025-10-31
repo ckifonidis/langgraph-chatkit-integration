@@ -1,10 +1,8 @@
 import clsx from "clsx";
 
 import { ChatKitPanel } from "./ChatKitPanel";
-import { FactCard } from "./FactCard";
 import { ThemeToggle } from "./ThemeToggle";
 import { ColorScheme } from "../hooks/useColorScheme";
-import { useFacts } from "../hooks/useFacts";
 
 export default function Home({
   scheme,
@@ -13,8 +11,6 @@ export default function Home({
   scheme: ColorScheme;
   handleThemeChange: (scheme: ColorScheme) => void;
 }) {
-  const { facts, refresh, performAction } = useFacts();
-
   const containerClass = clsx(
     "min-h-screen bg-gradient-to-br transition-colors duration-300",
     scheme === "dark"
@@ -28,8 +24,6 @@ export default function Home({
         <div className="relative w-full md:w-[45%] flex h-[90vh] items-stretch overflow-hidden rounded-3xl bg-white/80 shadow-[0_45px_90px_-45px_rgba(15,23,42,0.6)] ring-2 ring-[#00BA88]/30 backdrop-blur md:h-[90vh] dark:bg-slate-900/70 dark:shadow-[0_45px_90px_-45px_rgba(15,23,42,0.85)] dark:ring-[#00BA88]/40">
           <ChatKitPanel
             theme={scheme}
-            onWidgetAction={performAction}
-            onResponseEnd={refresh}
             onThemeRequest={handleThemeChange}
           />
         </div>
@@ -70,37 +64,6 @@ export default function Home({
               <ThemeToggle value={scheme} onChange={handleThemeChange} />
             </div>
           </header>
-
-          <div>
-            <h2 className="text-lg font-semibold text-slate-700 dark:text-slate-200">
-              Saved Properties
-            </h2>
-            <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-              Properties you've favorited will appear here.
-            </p>
-            <div className="mt-6">
-              <div className="rounded-3xl border border-[#00BA88]/30 bg-white/70 shadow-[0_35px_90px_-55px_rgba(15,23,42,0.45)] ring-1 ring-[#00BA88]/20 backdrop-blur-sm dark:border-[#00BA88]/30 dark:bg-slate-900/50 dark:shadow-[0_45px_95px_-60px_rgba(15,23,42,0.85)] dark:ring-[#00BA88]/20">
-                <div className="max-h-[50vh] overflow-y-auto p-6 sm:max-h-[40vh]">
-                  {facts.length === 0 ? (
-                    <div className="flex flex-col items-start justify-center gap-3 text-slate-600 dark:text-slate-300">
-                      <span className="text-base font-medium text-slate-700 dark:text-slate-200">
-                        No properties saved yet.
-                      </span>
-                      <span className="text-sm text-slate-500 dark:text-slate-400">
-                        Search for properties to get started.
-                      </span>
-                    </div>
-                  ) : (
-                    <ul className="list-none space-y-3">
-                      {facts.map((fact) => (
-                        <FactCard key={fact.id} fact={fact} />
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
         </section>
       </div>
     </div>

@@ -234,6 +234,7 @@ def create_image_carousel(
 def create_property_listview(
     items: List[Dict[str, Any]],
     limit: int = 20,
+    favorites: List[str] = None,
 ) -> ListView:
     """
     Create a professional property ListView following ChatKit best practices.
@@ -250,6 +251,7 @@ def create_property_listview(
     Args:
         items: List of property items
         limit: Max items before "show more" (default: 20)
+        favorites: List of favorited property codes (default: [])
 
     Returns:
         ListView widget with property cards
@@ -265,13 +267,18 @@ def create_property_listview(
         ...         "location": "Nea Fokea",
         ...         "item_data": {...}
         ...     }],
-        ...     limit=20
+        ...     limit=20,
+        ...     favorites=["prop_1"]
         ... )
     """
+    if favorites is None:
+        favorites = []
+
     list_items = []
 
     for item in items:
         item_id = item.get("id", "")
+        is_favorited = item_id in favorites
 
         # Build property card content
         property_content = [
@@ -329,6 +336,15 @@ def create_property_listview(
                             ],
                         ) if item.get("location") else None,
                     ] if child is not None
+                ],
+            ),
+            # Action buttons (favorite + hide)
+            Col(
+                gap=1,
+                align="start",
+                children=[
+                    create_favorite_button(item_id, is_favorited=(item_id in favorites)),
+                    create_hide_button(item_id),
                 ],
             ),
         ]
@@ -624,3 +640,61 @@ def create_image_grid(
         )
 
     return Card(size="full", padding="lg", children=content)
+
+
+def create_favorite_button(
+    property_code: str,
+    is_favorited: bool = False
+) -> Button:
+    """
+    Create a favorite button for property cards.
+
+    Args:
+        property_code: Property code (e.g., "PROP001")
+        is_favorited: Whether property is currently favorited
+
+    Returns:
+        Button widget configured for server-side handling
+
+    Example:
+        >>> button = create_favorite_button("PROP123", is_favorited=True)
+    """
+    return Button(
+        label="",  # Icon only
+        iconStart="star-filled" if is_favorited else "star",
+        size="xs",
+        variant="ghost",
+        color="warning" if is_favorited else "secondary",
+        onClickAction=ActionConfig(
+            type="toggle_favorite",
+            # Server-side handling: backend will update preferences and re-render widget
+            payload={"propertyCode": property_code}
+        )
+    )
+
+
+def create_hide_button(property_code: str) -> Button:
+    """
+    Create a hide button for property cards.
+
+    Args:
+        property_code: Property code
+
+    Returns:
+        Button widget configured for server-side handling
+
+    Example:
+        >>> button = create_hide_button("PROP123")
+    """
+    return Button(
+        label="",  # Icon only
+        iconStart="empty-circle",  # Using empty-circle as a substitute for eye-slash
+        size="xs",
+        variant="ghost",
+        color="secondary",
+        onClickAction=ActionConfig(
+            type="hide_property",
+            # Server-side handling: backend will update preferences and re-render widget
+            payload={"propertyCode": property_code}
+        )
+    )

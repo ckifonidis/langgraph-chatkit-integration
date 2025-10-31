@@ -249,6 +249,7 @@ export function PropertyDetailModal({
                         </p>
                       )}
                     </div>
+                    {/* Close Button */}
                     <button
                       type="button"
                       className="flex-shrink-0 rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors"
@@ -592,6 +593,7 @@ export function PropertyDetailModal({
 
                 {/* Footer */}
                 <div className="border-t border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 px-6 py-4">
+                  {/* Close Button */}
                   <button
                     type="button"
                     className="w-full inline-flex justify-center items-center px-6 py-3 rounded-lg bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-medium hover:bg-slate-800 dark:hover:bg-slate-200 transition-colors shadow-sm"

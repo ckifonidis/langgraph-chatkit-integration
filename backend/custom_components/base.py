@@ -50,20 +50,25 @@ class CustomComponent(ABC):
         pass
 
     @abstractmethod
-    def render(self, response_data: dict[str, Any]) -> Card | None:
+    def render(self, response_data: dict[str, Any], user_preferences: dict[str, Any] | None = None) -> Card | None:
         """
         Create the widget from response data.
 
         Args:
             response_data: Full response dictionary from LangGraph
+            user_preferences: Optional user preferences dict with 'favorites' and 'hidden' lists
 
         Returns:
             A ChatKit widget (typically Card), or None if rendering fails.
 
         Example:
-            >>> def render(self, response_data):
+            >>> def render(self, response_data, user_preferences=None):
             ...     data = response_data["query_results"]
-            ...     return create_carousel(items=data)
+            ...     # Filter out hidden properties
+            ...     if user_preferences:
+            ...         hidden = user_preferences.get('hidden', [])
+            ...         data = [item for item in data if item['code'] not in hidden]
+            ...     return create_carousel(items=data, favorites=user_preferences.get('favorites', []))
         """
         pass
 

@@ -52,18 +52,37 @@ class PropertyCarouselComponent(CustomComponent):
         query_results = response_data.get("query_results", [])
         return isinstance(query_results, list) and len(query_results) > 0
 
-    def render(self, response_data: dict[str, Any]) -> ListView | None:
+    def render(self, response_data: dict[str, Any], user_preferences: dict[str, Any] | None = None) -> ListView | None:
         """
         Create a property ListView widget from query results.
 
         Args:
             response_data: LangGraph response with query_results field
+            user_preferences: Optional user preferences with 'favorites' and 'hidden' lists
 
         Returns:
             ListView widget with property items, or None if rendering fails
         """
         try:
-            properties = response_data.get("query_results", [])[:self.max_items]
+            properties = response_data.get("query_results", [])
+
+            # Filter out hidden properties
+            if user_preferences:
+                hidden = user_preferences.get('hidden', [])
+                if hidden:
+                    properties = [
+                        prop for prop in properties
+                        if prop.get('code') not in hidden
+                    ]
+                    print(f"[DEBUG] Filtered {len(response_data.get('query_results', [])) - len(properties)} hidden properties")
+
+            # If all properties are hidden, return None
+            if not properties:
+                print("[DEBUG] All properties were hidden, returning None")
+                return None
+
+            # Limit to max_items after filtering
+            properties = properties[:self.max_items]
 
             # Convert properties to ListView items
             listview_items = []
@@ -112,10 +131,14 @@ class PropertyCarouselComponent(CustomComponent):
                     "item_data": prop,       # Full property data for drilldown
                 })
 
+            # Extract favorites list
+            favorites = user_preferences.get('favorites', []) if user_preferences else []
+
             # Render ListView with built-in "show more"
             listview = create_property_listview(
                 items=listview_items,
                 limit=self.max_items,
+                favorites=favorites,
             )
 
             return listview

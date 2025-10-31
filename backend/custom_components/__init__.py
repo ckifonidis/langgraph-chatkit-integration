@@ -60,7 +60,7 @@ class ComponentRegistry:
         self.components.sort(key=lambda c: c.get_priority())
         logger.info(f"Registered component: {component.__class__.__name__}")
 
-    def get_widgets(self, response_data: dict[str, Any]) -> list[Card]:
+    def get_widgets(self, response_data: dict[str, Any], user_preferences: dict[str, Any] | None = None) -> list[Card]:
         """
         Get all widgets that should render for the given response data.
 
@@ -68,6 +68,7 @@ class ComponentRegistry:
 
         Args:
             response_data: Full response dictionary from LangGraph
+            user_preferences: Optional user preferences (favorites, hidden) from backend store
 
         Returns:
             List of widgets to display (may be empty)
@@ -76,7 +77,7 @@ class ComponentRegistry:
             >>> widgets = registry.get_widgets({
             ...     "query_results": [...],
             ...     "sql_query": {...}
-            ... })
+            ... }, user_preferences={'favorites': ['P123'], 'hidden': ['P456']})
             >>> # widgets = [PropertyCarousel(...)]
         """
         widgets = []
@@ -89,8 +90,8 @@ class ComponentRegistry:
                         f"Component {component.__class__.__name__} rules matched"
                     )
 
-                    # Render the widget
-                    widget = component.render(response_data)
+                    # Render the widget with user preferences
+                    widget = component.render(response_data, user_preferences=user_preferences)
 
                     if widget is not None:
                         widgets.append(widget)

@@ -21,6 +21,8 @@ class MemoryStore(Store[dict[str, Any]]):
         self._threads: Dict[str, _ThreadState] = {}
         # Map user_id -> set of thread_ids
         self._user_threads: Dict[str, set[str]] = {}
+        # Map user_id -> user preferences (favorites, hidden)
+        self._preferences: Dict[str, Dict[str, Any]] = {}
         # Attachments intentionally unsupported; use a real store that enforces auth.
 
     @staticmethod
@@ -175,6 +177,85 @@ class MemoryStore(Store[dict[str, Any]]):
     ) -> None:
         items = self._items(thread_id)
         self._threads[thread_id].items = [item for item in items if item.id != item_id]
+
+    # -- User Preferences ------------------------------------------------
+    def get_preferences(self, user_id: str) -> Dict[str, Any]:
+        """
+        Get user preferences (favorites, hidden properties).
+
+        Args:
+            user_id: The user ID from session
+
+        Returns:
+            Dictionary with favorites and hidden lists
+        """
+        return self._preferences.get(user_id, {
+            'favorites': [],
+            'hidden': [],
+            'version': 1
+        })
+
+    def update_preferences(self, user_id: str, preferences: Dict[str, Any]) -> None:
+        """
+        Update entire user preferences dictionary.
+
+        Args:
+            user_id: The user ID from session
+            preferences: Complete preferences dictionary
+        """
+        self._preferences[user_id] = preferences
+
+    def add_favorite(self, user_id: str, property_code: str) -> None:
+        """
+        Add a property to user's favorites.
+
+        Args:
+            user_id: The user ID from session
+            property_code: Property code to favorite
+        """
+        prefs = self.get_preferences(user_id)
+        if property_code not in prefs['favorites']:
+            prefs['favorites'].append(property_code)
+        self._preferences[user_id] = prefs
+
+    def remove_favorite(self, user_id: str, property_code: str) -> None:
+        """
+        Remove a property from user's favorites.
+
+        Args:
+            user_id: The user ID from session
+            property_code: Property code to unfavorite
+        """
+        prefs = self.get_preferences(user_id)
+        if property_code in prefs['favorites']:
+            prefs['favorites'].remove(property_code)
+        self._preferences[user_id] = prefs
+
+    def hide_property(self, user_id: str, property_code: str) -> None:
+        """
+        Add a property to user's hidden list.
+
+        Args:
+            user_id: The user ID from session
+            property_code: Property code to hide
+        """
+        prefs = self.get_preferences(user_id)
+        if property_code not in prefs['hidden']:
+            prefs['hidden'].append(property_code)
+        self._preferences[user_id] = prefs
+
+    def unhide_property(self, user_id: str, property_code: str) -> None:
+        """
+        Remove a property from user's hidden list.
+
+        Args:
+            user_id: The user ID from session
+            property_code: Property code to unhide
+        """
+        prefs = self.get_preferences(user_id)
+        if property_code in prefs['hidden']:
+            prefs['hidden'].remove(property_code)
+        self._preferences[user_id] = prefs
 
     # -- Files -----------------------------------------------------------
     # These methods are not currently used but required to be compatible with the Store interface.

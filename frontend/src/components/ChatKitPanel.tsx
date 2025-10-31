@@ -7,24 +7,18 @@ import {
   PLACEHOLDER_INPUT,
   GREETING,
 } from "../lib/config";
-import type { FactAction } from "../hooks/useFacts";
 import type { ColorScheme } from "../hooks/useColorScheme";
 import { PropertyDetailModal } from "./PropertyDetailModal";
 
 type ChatKitPanelProps = {
   theme: ColorScheme;
-  onWidgetAction: (action: FactAction) => Promise<void>;
-  onResponseEnd: () => void;
   onThemeRequest: (scheme: ColorScheme) => void;
 };
 
 export function ChatKitPanel({
   theme,
-  onWidgetAction,
-  onResponseEnd,
   onThemeRequest,
 }: ChatKitPanelProps) {
-  const processedFacts = useRef(new Set<string>());
   const [selectedProperty, setSelectedProperty] = useState<any | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
@@ -61,7 +55,7 @@ export function ChatKitPanel({
           console.debug("[ChatKitPanel] widget.action", action);
         }
 
-        // Handle property detail modal
+        // Handle property detail modal (client-side only)
         if (action.type === "view_item_details") {
           const propertyData = action.payload?.item_data;
           if (propertyData) {
@@ -79,14 +73,6 @@ export function ChatKitPanel({
             return;
           }
         }
-
-        // Handle other widget actions here
-        if (action.type === "user_confirmation") {
-          const answer = action.payload?.answer;
-          console.log("User answered:", answer);
-          // You can trigger additional actions based on the answer
-          return;
-        }
       },
     },
     onClientTool: async (invocation) => {
@@ -102,28 +88,7 @@ export function ChatKitPanel({
         return { success: false };
       }
 
-      if (invocation.name === "record_fact") {
-        const id = String(invocation.params.fact_id ?? "");
-        const text = String(invocation.params.fact_text ?? "");
-        if (!id || processedFacts.current.has(id)) {
-          return { success: true };
-        }
-        processedFacts.current.add(id);
-        void onWidgetAction({
-          type: "save",
-          factId: id,
-          factText: text.replace(/\s+/g, " ").trim(),
-        });
-        return { success: true };
-      }
-
       return { success: false };
-    },
-    onResponseEnd: () => {
-      onResponseEnd();
-    },
-    onThreadChange: () => {
-      processedFacts.current.clear();
     },
     onError: ({ error }) => {
       // ChatKit handles displaying the error to the user

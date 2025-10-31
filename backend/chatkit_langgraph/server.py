@@ -249,6 +249,11 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
         Yields:
             ChatKit thread stream events
         """
+        # Load user preferences from store
+        user_id = context.get("user_id", "anonymous")
+        user_preferences = self.store.get_preferences(user_id)
+        print(f"[DEBUG] User preferences loaded: favorites={len(user_preferences.get('favorites', []))}, hidden={len(user_preferences.get('hidden', []))}")
+
         # Map ChatKit thread ID to LangGraph UUID
         # Simple: if mapping exists, reuse it; otherwise create new UUID
         langgraph_thread_id = self._thread_id_map.setdefault(thread.id, str(uuid4()))
@@ -317,7 +322,7 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                 if self.component_registry and final_event:
                     print(f"[DEBUG] Checking components. Event keys: {list(final_event.keys())}")
                     print(f"[DEBUG] Has query_results: {'query_results' in final_event}, count: {len(final_event.get('query_results', []))}")
-                    widgets = self.component_registry.get_widgets(final_event)
+                    widgets = self.component_registry.get_widgets(final_event, user_preferences=user_preferences)
                     print(f"[DEBUG] Component registry returned {len(widgets)} widgets")
 
                     # Yield each widget that matched rules
@@ -352,7 +357,7 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                 # Check component registry for carousel widget
                 if self.component_registry and final_event:
                     print(f"[DEBUG] Checking components for query results")
-                    widgets = self.component_registry.get_widgets(final_event)
+                    widgets = self.component_registry.get_widgets(final_event, user_preferences=user_preferences)
                     print(f"[DEBUG] Component registry returned {len(widgets)} widgets")
 
                     for widget in widgets:
@@ -431,6 +436,38 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
             f"Handling action: {action.type}",
             extra={"thread_id": thread.id, "action_type": action.type},
         )
+
+        # Get user ID from context
+        user_id = context.get("user_id", "anonymous")
+
+        # Handle toggle_favorite action
+        if action.type == "toggle_favorite":
+            property_code = action.payload.get("propertyCode")
+            if property_code:
+                # Update preferences silently (no immediate re-render)
+                prefs = self.store.get_preferences(user_id)
+                if property_code in prefs['favorites']:
+                    self.store.remove_favorite(user_id, property_code)
+                    logger.info(f"Removed {property_code} from favorites for user {user_id[:8]}")
+                else:
+                    self.store.add_favorite(user_id, property_code)
+                    logger.info(f"Added {property_code} to favorites for user {user_id[:8]}")
+
+                # Preferences will be used on next search/query
+                print(f"[DEBUG] Updated preferences: {self.store.get_preferences(user_id)}")
+            return
+
+        # Handle hide_property action
+        if action.type == "hide_property":
+            property_code = action.payload.get("propertyCode")
+            if property_code:
+                # Update preferences silently (no immediate re-render)
+                self.store.hide_property(user_id, property_code)
+                logger.info(f"Hidden property {property_code} for user {user_id[:8]}")
+
+                # Preferences will be used on next search/query
+                print(f"[DEBUG] Updated preferences: {self.store.get_preferences(user_id)}")
+            return
 
         # Handle view_item_details action (from property carousel drilldown)
         if action.type == "view_item_details":
