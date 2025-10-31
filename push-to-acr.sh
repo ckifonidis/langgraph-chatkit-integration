@@ -76,14 +76,29 @@ fi
 echo "✅ Successfully logged into ACR"
 echo ""
 
-# Step 4: Build the image for linux/amd64 (Azure standard)
+# Step 4: Load environment variables for build
+echo "📦 Loading build configuration..."
+if [[ -f ".env" ]]; then
+  export $(cat .env | grep -E "^VITE_" | xargs)
+  echo "✅ Loaded VITE_* variables from .env"
+else
+  echo "⚠️  No .env file found, using environment variables"
+fi
+
+# Step 5: Build the image for linux/amd64 (Azure standard)
 echo "🔨 Building LangGraph ChatKit image for linux/amd64..."
 echo "   This may take several minutes (multi-stage build)..."
+echo "   Build args:"
+echo "     - VITE_CHATKIT_API_DOMAIN_KEY=${VITE_CHATKIT_API_DOMAIN_KEY:-<not set>}"
+echo "     - VITE_GOOGLE_MAPS_API_KEY=${VITE_GOOGLE_MAPS_API_KEY:-<not set>}"
+echo ""
 
 docker buildx build \
   --platform linux/amd64 \
   -f "${DOCKERFILE}" \
   -t "${LOCAL_IMAGE}" \
+  --build-arg VITE_CHATKIT_API_DOMAIN_KEY="${VITE_CHATKIT_API_DOMAIN_KEY}" \
+  --build-arg VITE_GOOGLE_MAPS_API_KEY="${VITE_GOOGLE_MAPS_API_KEY}" \
   . \
   --load
 
@@ -95,7 +110,7 @@ fi
 echo "✅ Image built successfully: ${LOCAL_IMAGE}"
 echo ""
 
-# Step 5: Tag the images
+# Step 6: Tag the images
 echo "🏷️  Tagging images..."
 
 # Tag with specified version
@@ -119,7 +134,7 @@ echo "   - ${REMOTE_IMAGE}"
 echo "   - ${REMOTE_IMAGE_LATEST}"
 echo ""
 
-# Step 6: Push the versioned image
+# Step 7: Push the versioned image
 echo "📤 Pushing versioned image (${TAG})..."
 docker push "${REMOTE_IMAGE}"
 
@@ -131,7 +146,7 @@ fi
 echo "✅ Versioned image pushed successfully"
 echo ""
 
-# Step 7: Push the latest tag
+# Step 8: Push the latest tag
 echo "📤 Pushing latest tag..."
 docker push "${REMOTE_IMAGE_LATEST}"
 
@@ -143,7 +158,7 @@ fi
 echo "✅ Latest tag pushed successfully"
 echo ""
 
-# Step 8: Verify the images in ACR
+# Step 9: Verify the images in ACR
 echo "🔍 Verifying images in registry..."
 echo "   Checking: ${REMOTE_IMAGE}"
 
