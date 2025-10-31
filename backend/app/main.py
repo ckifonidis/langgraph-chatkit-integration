@@ -136,6 +136,154 @@ async def get_preferences(
     }
 
 
+@app.post("/langgraph/preferences/favorites")
+async def add_favorite(
+    request: Request,
+    server: LangGraphChatKitServer = Depends(get_langgraph_server),
+) -> dict[str, Any]:
+    """
+    Add a property to user's favorites.
+
+    Request body:
+        {
+            "propertyCode": "PROP001",
+            "propertyData": { ... full property object ... }
+        }
+
+    Returns:
+        Updated preferences
+    """
+    # Get user session ID
+    if "user_id" not in request.session:
+        return {"error": "No session found"}
+
+    user_id = request.session["user_id"]
+
+    # Get request body
+    body = await request.json()
+    property_code = body.get("propertyCode")
+    property_data = body.get("propertyData", {})
+
+    if not property_code or not property_data:
+        return {"error": "propertyCode and propertyData are required"}
+
+    # Add to favorites
+    server.store.add_favorite(user_id, property_code, property_data)
+
+    # Return updated preferences
+    preferences = server.store.get_preferences(user_id)
+    return {
+        "success": True,
+        "preferences": preferences,
+    }
+
+
+@app.delete("/langgraph/preferences/favorites/{property_code}")
+async def remove_favorite(
+    property_code: str,
+    request: Request,
+    server: LangGraphChatKitServer = Depends(get_langgraph_server),
+) -> dict[str, Any]:
+    """
+    Remove a property from user's favorites.
+
+    Args:
+        property_code: Property code to remove
+
+    Returns:
+        Updated preferences
+    """
+    # Get user session ID
+    if "user_id" not in request.session:
+        return {"error": "No session found"}
+
+    user_id = request.session["user_id"]
+
+    # Remove from favorites
+    server.store.remove_favorite(user_id, property_code)
+
+    # Return updated preferences
+    preferences = server.store.get_preferences(user_id)
+    return {
+        "success": True,
+        "preferences": preferences,
+    }
+
+
+@app.post("/langgraph/preferences/hidden")
+async def hide_property_endpoint(
+    request: Request,
+    server: LangGraphChatKitServer = Depends(get_langgraph_server),
+) -> dict[str, Any]:
+    """
+    Hide a property.
+
+    Request body:
+        {
+            "propertyCode": "PROP001",
+            "propertyData": { ... full property object ... }
+        }
+
+    Returns:
+        Updated preferences
+    """
+    # Get user session ID
+    if "user_id" not in request.session:
+        return {"error": "No session found"}
+
+    user_id = request.session["user_id"]
+
+    # Get request body
+    body = await request.json()
+    property_code = body.get("propertyCode")
+    property_data = body.get("propertyData", {})
+
+    if not property_code or not property_data:
+        return {"error": "propertyCode and propertyData are required"}
+
+    # Hide property
+    server.store.hide_property(user_id, property_code, property_data)
+
+    # Return updated preferences
+    preferences = server.store.get_preferences(user_id)
+    return {
+        "success": True,
+        "preferences": preferences,
+    }
+
+
+@app.delete("/langgraph/preferences/hidden/{property_code}")
+async def unhide_property(
+    property_code: str,
+    request: Request,
+    server: LangGraphChatKitServer = Depends(get_langgraph_server),
+) -> dict[str, Any]:
+    """
+    Remove a property from user's hidden list (unhide it).
+
+    Args:
+        property_code: Property code to unhide
+
+    Returns:
+        Updated preferences
+    """
+    # Get user session ID
+    if "user_id" not in request.session:
+        return {"error": "No session found"}
+
+    user_id = request.session["user_id"]
+
+    # Unhide property
+    server.store.unhide_property(user_id, property_code)
+
+    # Return updated preferences
+    preferences = server.store.get_preferences(user_id)
+    return {
+        "success": True,
+        "preferences": preferences,
+    }
+
+
 @app.get("/")
 async def root() -> dict[str, str]:
     """Root endpoint with API information."""

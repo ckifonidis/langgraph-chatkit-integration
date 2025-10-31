@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import Home from "./components/Home";
 import { useColorScheme } from "./hooks/useColorScheme";
+import { PreferencesProvider } from "./contexts/PreferencesContext";
 
 export default function App() {
   const { scheme, setScheme } = useColorScheme();
@@ -11,5 +12,9 @@ export default function App() {
     [setScheme]
   );
 
-  return <Home scheme={scheme} handleThemeChange={handleThemeChange} />;
+  return (
+    <PreferencesProvider>
+      <Home scheme={scheme} handleThemeChange={handleThemeChange} />
+    </PreferencesProvider>
+  );
 }

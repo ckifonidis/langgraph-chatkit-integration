@@ -1,6 +1,9 @@
 import { Fragment, useEffect, useState } from "react";
 import { Dialog, Transition } from "@headlessui/react";
-import { XMarkIcon, CheckIcon, XCircleIcon } from "@heroicons/react/24/outline";
+import { XMarkIcon, CheckIcon, XCircleIcon, StarIcon } from "@heroicons/react/24/outline";
+import { StarIcon as StarIconSolid } from "@heroicons/react/24/solid";
+import { usePreferences } from "../contexts/PreferencesContext";
+import { Tooltip } from "./Tooltip";
 
 // Google Maps type declarations
 declare global {
@@ -169,9 +172,94 @@ export function PropertyDetailModal({
   property,
 }: PropertyDetailModalProps) {
   const [mapsLoaded, setMapsLoaded] = useState(false);
+  const { preferences, refreshPreferences } = usePreferences();
+  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
+  const [isHiding, setIsHiding] = useState(false);
 
   // Get API key
   const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+
+  // Check if property is favorited
+  const isFavorited = property?.code ? property.code in preferences.favorites : false;
+  const isHidden = property?.code ? property.code in preferences.hidden : false;
+
+  // Handle favorite toggle
+  const handleToggleFavorite = async () => {
+    if (!property?.code) return;
+
+    setIsTogglingFavorite(true);
+    try {
+      if (isFavorited) {
+        // Remove from favorites
+        const response = await fetch(`/langgraph/preferences/favorites/${property.code}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+        if (response.ok) {
+          await refreshPreferences();
+        }
+      } else {
+        // Add to favorites
+        const response = await fetch('/langgraph/preferences/favorites', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            propertyCode: property.code,
+            propertyData: property,
+          }),
+        });
+        if (response.ok) {
+          await refreshPreferences();
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling favorite:', error);
+    } finally {
+      setIsTogglingFavorite(false);
+    }
+  };
+
+  // Handle hide/unhide toggle
+  const handleToggleHide = async () => {
+    if (!property?.code) return;
+
+    setIsHiding(true);
+    try {
+      if (isHidden) {
+        // Unhide property
+        const response = await fetch(`/langgraph/preferences/hidden/${property.code}`, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
+        if (response.ok) {
+          await refreshPreferences();
+        }
+      } else {
+        // Hide property
+        const response = await fetch('/langgraph/preferences/hidden', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            propertyCode: property.code,
+            propertyData: property,
+          }),
+        });
+        if (response.ok) {
+          await refreshPreferences();
+        }
+      }
+    } catch (error) {
+      console.error('Error toggling hide:', error);
+    } finally {
+      setIsHiding(false);
+    }
+  };
 
   // Dynamically load Google Maps API
   useEffect(() => {
@@ -249,14 +337,58 @@ export function PropertyDetailModal({
                         </p>
                       )}
                     </div>
-                    {/* Close Button */}
-                    <button
-                      type="button"
-                      className="flex-shrink-0 rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors"
-                      onClick={onClose}
-                    >
-                      <XMarkIcon className="h-6 w-6" />
-                    </button>
+                    {/* Action Buttons */}
+                    <div className="flex items-center gap-2">
+                      {/* Favorite Button */}
+                      <Tooltip content={isFavorited ? "Click to remove from favorites" : "Click to add to favorites"}>
+                        <button
+                          type="button"
+                          onClick={handleToggleFavorite}
+                          disabled={isTogglingFavorite}
+                          className="flex-shrink-0 rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-yellow-500 dark:hover:bg-slate-800 dark:hover:text-yellow-400 transition-colors disabled:opacity-50"
+                        >
+                          {isFavorited ? (
+                            <StarIconSolid className="h-6 w-6 text-yellow-500" />
+                          ) : (
+                            <StarIcon className="h-6 w-6" />
+                          )}
+                        </button>
+                      </Tooltip>
+
+                      {/* Hide/Unhide Button */}
+                      <Tooltip content={isHidden ? "Click to unhide this property" : "Click to hide this property"}>
+                        <button
+                          type="button"
+                          onClick={handleToggleHide}
+                          disabled={isHiding}
+                          className="flex-shrink-0 rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors disabled:opacity-50"
+                        >
+                          {isHidden ? (
+                            // Eye icon (visible/unhide)
+                            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                            </svg>
+                          ) : (
+                            // Eye-slash icon (hidden/hide)
+                            <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" />
+                            </svg>
+                          )}
+                        </button>
+                      </Tooltip>
+
+                      {/* Close Button */}
+                      <Tooltip content="Close modal">
+                        <button
+                          type="button"
+                          className="flex-shrink-0 rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors"
+                          onClick={onClose}
+                        >
+                          <XMarkIcon className="h-6 w-6" />
+                        </button>
+                      </Tooltip>
+                    </div>
                   </div>
                 </div>
 

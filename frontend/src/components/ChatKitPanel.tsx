@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { ChatKit, useChatKit } from "@openai/chatkit-react";
 import {
   CHATKIT_API_URL,
@@ -9,6 +9,7 @@ import {
 } from "../lib/config";
 import type { ColorScheme } from "../hooks/useColorScheme";
 import { PropertyDetailModal } from "./PropertyDetailModal";
+import { usePreferences } from "../contexts/PreferencesContext";
 
 type ChatKitPanelProps = {
   theme: ColorScheme;
@@ -21,6 +22,16 @@ export function ChatKitPanel({
 }: ChatKitPanelProps) {
   const [selectedProperty, setSelectedProperty] = useState<any | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const { refreshPreferences } = usePreferences();
+
+  // Refresh preferences periodically to catch server-side updates
+  useEffect(() => {
+    const interval = setInterval(() => {
+      refreshPreferences();
+    }, 5000); // Refresh every 5 seconds
+
+    return () => clearInterval(interval);
+  }, [refreshPreferences]);
 
   const chatkit = useChatKit({
     api: { url: CHATKIT_API_URL, domainKey: CHATKIT_API_DOMAIN_KEY },

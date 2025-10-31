@@ -68,7 +68,7 @@ class PropertyCarouselComponent(CustomComponent):
 
             # Filter out hidden properties
             if user_preferences:
-                hidden = user_preferences.get('hidden', [])
+                hidden = set(user_preferences.get('hidden', {}).keys())
                 if hidden:
                     properties = [
                         prop for prop in properties
@@ -131,8 +131,8 @@ class PropertyCarouselComponent(CustomComponent):
                     "item_data": prop,       # Full property data for drilldown
                 })
 
-            # Extract favorites list
-            favorites = user_preferences.get('favorites', []) if user_preferences else []
+            # Extract favorites set
+            favorites = set(user_preferences.get('favorites', {}).keys()) if user_preferences else set()
 
             # Render ListView with built-in "show more"
             listview = create_property_listview(

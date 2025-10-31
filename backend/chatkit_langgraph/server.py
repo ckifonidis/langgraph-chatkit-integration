@@ -447,29 +447,31 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
         # Handle toggle_favorite action
         if action.type == "toggle_favorite":
             property_code = action.payload.get("propertyCode")
-            if property_code:
+            property_data = action.payload.get("item_data", {})
+            if property_code and property_data:
                 # Update preferences silently (no immediate re-render)
                 prefs = self.store.get_preferences(user_id)
                 if property_code in prefs['favorites']:
                     self.store.remove_favorite(user_id, property_code)
                     logger.info(f"Removed {property_code} from favorites for user {user_id[:8]}")
                 else:
-                    self.store.add_favorite(user_id, property_code)
+                    self.store.add_favorite(user_id, property_code, property_data)
                     logger.info(f"Added {property_code} to favorites for user {user_id[:8]}")
 
                 # Preferences will be used on next search/query
-                print(f"[DEBUG] Updated preferences: {self.store.get_preferences(user_id)}")
+                print(f"[DEBUG] Updated preferences: {len(self.store.get_preferences(user_id).get('favorites', {}))} favorites")
 
         # Handle hide_property action
         elif action.type == "hide_property":
             property_code = action.payload.get("propertyCode")
-            if property_code:
+            property_data = action.payload.get("item_data", {})
+            if property_code and property_data:
                 # Update preferences silently (no immediate re-render)
-                self.store.hide_property(user_id, property_code)
+                self.store.hide_property(user_id, property_code, property_data)
                 logger.info(f"Hidden property {property_code} for user {user_id[:8]}")
 
                 # Preferences will be used on next search/query
-                print(f"[DEBUG] Updated preferences: {self.store.get_preferences(user_id)}")
+                print(f"[DEBUG] Updated preferences: {len(self.store.get_preferences(user_id).get('hidden', {}))} hidden")
 
     async def to_message_content(
         self, _input: Attachment

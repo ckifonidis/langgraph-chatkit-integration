@@ -275,9 +275,23 @@ Button(
 **User Preferences Structure:**
 ```python
 {
-    'favorites': ['PROP001', 'PROP042', 'PROP123'],  # List of property codes
-    'hidden': ['PROP999'],                            # List of hidden property codes
-    'version': 1                                      # Schema version
+    'favorites': {
+        'PROP001': { # Full property object
+            'code': 'PROP001',
+            'title': 'Maisonette 224sqm, Nea Fokea',
+            'price': 115000,
+            'propertyArea': 224,
+            'defaultImagePath': 'https://...',
+            'address': {'prefecture': 'Chalkidiki'},
+            # ... complete property data
+        }
+    },
+    'hidden': {
+        'PROP999': { # Full property object
+            # ... complete property data
+        }
+    },
+    'version': 2  # Schema version (v2 = dict-based, v1 = list-based)
 }
 ```
 
@@ -312,15 +326,39 @@ widgets = self.component_registry.get_widgets(
 ```sql
 CREATE TABLE user_preferences (
     user_id VARCHAR(255) PRIMARY KEY,
-    favorites JSONB DEFAULT '[]'::jsonb,
-    hidden JSONB DEFAULT '[]'::jsonb,
-    version INTEGER DEFAULT 1,
+    favorites JSONB DEFAULT '{}'::jsonb,
+    hidden JSONB DEFAULT '{}'::jsonb,
+    version INTEGER DEFAULT 2,
     created_at TIMESTAMP DEFAULT NOW(),
     updated_at TIMESTAMP DEFAULT NOW()
 );
 
 CREATE INDEX idx_user_preferences_user_id ON user_preferences(user_id);
 ```
+
+### Preferences Sidebar
+
+A right sidebar panel displays user preferences with full property cards:
+
+**Features:**
+- **Collapsed State** (default): Shows summary "X favorites • Y hidden"
+- **Expanded State**: Displays full property cards with images, titles, prices
+- **Auto-Refresh**: Updates every 5 seconds to catch server-side changes
+- **Responsive**: Hidden on mobile, visible on medium+ screens
+
+**Implementation:**
+- `PreferencesContext.tsx` - React Context providing preferences state and refresh function
+- `PreferencesSidebar.tsx` - Collapsible sidebar component with property cards
+- `Home.tsx` - Renders sidebar above header in right section
+- `ChatKitPanel.tsx` - Polls `/langgraph/preferences` every 5 seconds
+- `App.tsx` - Wrapped with `<PreferencesProvider>`
+
+**Endpoints:**
+- `GET /langgraph/preferences` - Returns current user's preferences with full property data
+
+**File Locations:**
+- Context: `frontend/src/contexts/PreferencesContext.tsx`
+- Sidebar: `frontend/src/components/PreferencesSidebar.tsx`
 
 ## Widget System
 

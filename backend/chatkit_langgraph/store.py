@@ -187,12 +187,12 @@ class MemoryStore(Store[dict[str, Any]]):
             user_id: The user ID from session
 
         Returns:
-            Dictionary with favorites and hidden lists
+            Dictionary with favorites and hidden dicts (property_code -> property_data)
         """
         return self._preferences.get(user_id, {
-            'favorites': [],
-            'hidden': [],
-            'version': 1
+            'favorites': {},
+            'hidden': {},
+            'version': 2
         })
 
     def update_preferences(self, user_id: str, preferences: Dict[str, Any]) -> None:
@@ -205,17 +205,17 @@ class MemoryStore(Store[dict[str, Any]]):
         """
         self._preferences[user_id] = preferences
 
-    def add_favorite(self, user_id: str, property_code: str) -> None:
+    def add_favorite(self, user_id: str, property_code: str, property_data: Dict[str, Any]) -> None:
         """
-        Add a property to user's favorites.
+        Add a property to user's favorites with full property data.
 
         Args:
             user_id: The user ID from session
             property_code: Property code to favorite
+            property_data: Complete property object (title, price, image, etc.)
         """
         prefs = self.get_preferences(user_id)
-        if property_code not in prefs['favorites']:
-            prefs['favorites'].append(property_code)
+        prefs['favorites'][property_code] = property_data
         self._preferences[user_id] = prefs
 
     def remove_favorite(self, user_id: str, property_code: str) -> None:
@@ -228,20 +228,20 @@ class MemoryStore(Store[dict[str, Any]]):
         """
         prefs = self.get_preferences(user_id)
         if property_code in prefs['favorites']:
-            prefs['favorites'].remove(property_code)
+            del prefs['favorites'][property_code]
         self._preferences[user_id] = prefs
 
-    def hide_property(self, user_id: str, property_code: str) -> None:
+    def hide_property(self, user_id: str, property_code: str, property_data: Dict[str, Any]) -> None:
         """
-        Add a property to user's hidden list.
+        Add a property to user's hidden list with full property data.
 
         Args:
             user_id: The user ID from session
             property_code: Property code to hide
+            property_data: Complete property object (title, price, image, etc.)
         """
         prefs = self.get_preferences(user_id)
-        if property_code not in prefs['hidden']:
-            prefs['hidden'].append(property_code)
+        prefs['hidden'][property_code] = property_data
         self._preferences[user_id] = prefs
 
     def unhide_property(self, user_id: str, property_code: str) -> None:
@@ -254,7 +254,7 @@ class MemoryStore(Store[dict[str, Any]]):
         """
         prefs = self.get_preferences(user_id)
         if property_code in prefs['hidden']:
-            prefs['hidden'].remove(property_code)
+            del prefs['hidden'][property_code]
         self._preferences[user_id] = prefs
 
     # -- Files -----------------------------------------------------------

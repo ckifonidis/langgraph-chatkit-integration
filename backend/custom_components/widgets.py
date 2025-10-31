@@ -128,15 +128,8 @@ def create_property_listview(
                     ] if child is not None
                 ],
             ),
-            # Action buttons (favorite + hide)
-            Col(
-                gap=1,
-                align="start",
-                children=[
-                    create_favorite_button(item_id, is_favorited=(item_id in favorites)),
-                    create_hide_button(item_id),
-                ],
-            ),
+            # Favorite indicator (non-interactive, only shows if favorited)
+            create_favorite_indicator(is_favorited=(item_id in favorites)),
         ]
 
         # Filter out None values
@@ -166,59 +159,27 @@ def create_property_listview(
     )
 
 
-def create_favorite_button(
-    property_code: str,
-    is_favorited: bool = False
-) -> Button:
+def create_favorite_indicator(is_favorited: bool) -> Icon | None:
     """
-    Create a favorite button for property cards.
+    Create a static favorite indicator icon (non-interactive).
 
     Args:
-        property_code: Property code (e.g., "PROP001")
         is_favorited: Whether property is currently favorited
 
     Returns:
-        Button widget configured for server-side handling
+        Gold star Icon widget if favorited, None otherwise
 
     Example:
-        >>> button = create_favorite_button("PROP123", is_favorited=True)
+        >>> indicator = create_favorite_indicator(is_favorited=True)
+        >>> # Returns gold star icon
+        >>> indicator = create_favorite_indicator(is_favorited=False)
+        >>> # Returns None (don't show anything)
     """
-    return Button(
-        label="",  # Icon only
-        iconStart="star-filled" if is_favorited else "star",
-        size="xs",
-        variant="ghost",
-        color="warning" if is_favorited else "secondary",
-        onClickAction=ActionConfig(
-            type="toggle_favorite",
-            # Server-side handling: backend will update preferences and re-render widget
-            payload={"propertyCode": property_code}
-        )
-    )
+    if not is_favorited:
+        return None
 
-
-def create_hide_button(property_code: str) -> Button:
-    """
-    Create a hide button for property cards.
-
-    Args:
-        property_code: Property code
-
-    Returns:
-        Button widget configured for server-side handling
-
-    Example:
-        >>> button = create_hide_button("PROP123")
-    """
-    return Button(
-        label="",  # Icon only
-        iconStart="empty-circle",  # Using empty-circle as a substitute for eye-slash
-        size="xs",
-        variant="ghost",
-        color="secondary",
-        onClickAction=ActionConfig(
-            type="hide_property",
-            # Server-side handling: backend will update preferences and re-render widget
-            payload={"propertyCode": property_code}
-        )
+    return Icon(
+        name="star-filled",
+        size="md",
+        color={"light": "#FFA500", "dark": "#FFB800"},  # Gold/orange color for both themes
     )
