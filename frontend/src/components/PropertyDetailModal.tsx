@@ -177,6 +177,11 @@ export function PropertyDetailModal({
   const [isHiding, setIsHiding] = useState(false);
   const mapInstanceRef = useRef<any>(null);
 
+  // Description generation state
+  const [isLoadingDescription, setIsLoadingDescription] = useState(false);
+  const [descriptionError, setDescriptionError] = useState<string | null>(null);
+  const [enhancedProperty, setEnhancedProperty] = useState<PropertyData | null>(property);
+
   // Get API key
   const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
@@ -286,18 +291,77 @@ export function PropertyDetailModal({
     }
   }, [isOpen, property?.code]);
 
+  // Sync enhanced property with incoming property prop
+  useEffect(() => {
+    if (property) {
+      setEnhancedProperty(property);
+      setDescriptionError(null);
+    }
+  }, [property?.code]);
+
+  // Auto-fetch description when modal opens
+  useEffect(() => {
+    const fetchDescription = async () => {
+      if (!isOpen || !property?.code || !property) return;
+
+      // Skip if already loading
+      if (isLoadingDescription) return;
+
+      setIsLoadingDescription(true);
+      setDescriptionError(null);
+
+      try {
+        const response = await fetch('/langgraph/generate-description', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          credentials: 'include',
+          body: JSON.stringify({
+            propertyCode: property.code,
+            propertyData: property,
+            language: 'english',
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to generate description');
+        }
+
+        const data = await response.json();
+
+        // Update property with AI-generated description
+        setEnhancedProperty((prev) => ({
+          ...prev!,
+          description: data.description,
+        }));
+
+      } catch (error) {
+        console.error('Description generation error:', error);
+        setDescriptionError('Unable to generate AI description');
+      } finally {
+        setIsLoadingDescription(false);
+      }
+    };
+
+    fetchDescription();
+  }, [isOpen, property?.code]);
+
   if (!property) return null;
+
+  // Use enhanced property for display
+  const displayProperty = enhancedProperty || property;
 
   const formatPrice = (price?: number) => {
     if (!price) return "Price on request";
     return `€${price.toLocaleString()}`;
   };
 
-  const amenitiesList = parseAmenities(property.amenities);
-  const floorMaterial = formatArray(property.floorMaterial);
+  const amenitiesList = parseAmenities(displayProperty.amenities);
+  const floorMaterial = formatArray(displayProperty.floorMaterial);
 
   // Get coordinates for Google Maps
-  const coords = property.address?.geoPoint?.coordinates;
+  const coords = displayProperty.address?.geoPoint?.coordinates;
   let lat: number | undefined;
   let lng: number | undefined;
 
@@ -339,11 +403,11 @@ export function PropertyDetailModal({
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <Dialog.Title className="text-2xl font-bold text-slate-900 dark:text-slate-100 pr-8">
-                        {property.title || "Property Details"}
+                        {displayProperty.title || "Property Details"}
                       </Dialog.Title>
-                      {property.code && (
+                      {displayProperty.code && (
                         <p className="mt-1 text-sm text-slate-500 dark:text-slate-400">
-                          Property Code: {property.code}
+                          Property Code: {displayProperty.code}
                         </p>
                       )}
                     </div>
@@ -405,11 +469,11 @@ export function PropertyDetailModal({
                 {/* Content */}
                 <div className="px-6 py-6 max-h-[75vh] overflow-y-auto">
                   {/* Image */}
-                  {property.defaultImagePath && (
+                  {displayProperty.defaultImagePath && (
                     <div className="mb-6">
                       <img
-                        src={property.defaultImagePath}
-                        alt={property.title || "Property"}
+                        src={displayProperty.defaultImagePath}
+                        alt={displayProperty.title || "Property"}
                         className="w-full h-96 object-cover rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg"
                       />
                     </div>
@@ -418,43 +482,43 @@ export function PropertyDetailModal({
                   {/* Price */}
                   <div className="mb-6">
                     <div className="inline-flex items-center px-5 py-3 rounded-full bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 font-bold text-3xl shadow-sm">
-                      {formatPrice(property.price)}
+                      {formatPrice(displayProperty.price)}
                     </div>
                   </div>
 
                   {/* Key Stats Grid */}
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                    {(property.propertyArea ?? 0) > 0 && (
-                      <StatCard label="Area" value={`${property.propertyArea}m²`} />
+                    {(displayProperty.propertyArea ?? 0) > 0 && (
+                      <StatCard label="Area" value={`${displayProperty.propertyArea}m²`} />
                     )}
-                    {(property.numberOfRooms ?? 0) > 0 && (
-                      <StatCard label="Rooms" value={property.numberOfRooms.toString()} />
+                    {(displayProperty.numberOfRooms ?? 0) > 0 && (
+                      <StatCard label="Rooms" value={displayProperty.numberOfRooms.toString()} />
                     )}
-                    {(property.numberOfBathrooms ?? 0) > 0 && (
-                      <StatCard label="Bathrooms" value={property.numberOfBathrooms.toString()} />
+                    {(displayProperty.numberOfBathrooms ?? 0) > 0 && (
+                      <StatCard label="Bathrooms" value={displayProperty.numberOfBathrooms.toString()} />
                     )}
-                    {property.floor !== undefined && property.floor !== null && (
-                      <StatCard label="Floor" value={property.floor.toString()} />
+                    {displayProperty.floor !== undefined && displayProperty.floor !== null && (
+                      <StatCard label="Floor" value={displayProperty.floor.toString()} />
                     )}
                   </div>
 
                   {/* Location */}
-                  {property.address && (
+                  {displayProperty.address && (
                     <Section title="📍 Location" className="mb-6">
                       <div className="space-y-3">
                         <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4 border border-blue-200 dark:border-blue-800">
                           <p className="text-slate-700 dark:text-slate-300 font-medium">
                             {[
-                              property.address.prefecture,
-                              property.address.city,
-                              property.address.area,
+                              displayProperty.address.prefecture,
+                              displayProperty.address.city,
+                              displayProperty.address.area,
                             ]
                               .filter(Boolean)
                               .join(", ")}
                           </p>
-                          {property.address.fullAddress && (
+                          {displayProperty.address.fullAddress && (
                             <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">
-                              {property.address.fullAddress}
+                              {displayProperty.address.fullAddress}
                             </p>
                           )}
                         </div>
@@ -504,10 +568,10 @@ export function PropertyDetailModal({
                           <button
                             type="button"
                             onClick={() => {
-                              const address = property.address?.fullAddress || [
-                                property.address?.prefecture,
-                                property.address?.city,
-                                property.address?.area,
+                              const address = displayProperty.address?.fullAddress || [
+                                displayProperty.address?.prefecture,
+                                displayProperty.address?.city,
+                                displayProperty.address?.area,
                               ].filter(Boolean).join(", ");
                               const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
                               window.open(mapsUrl, "_blank", "noopener,noreferrer");
@@ -525,13 +589,68 @@ export function PropertyDetailModal({
                   )}
 
                   {/* Description */}
-                  {property.description && property.description !== "Property Description" && (
-                    <Section title="📋 Description" className="mb-6">
+                  <Section title="📋 Description" className="mb-6">
+                    {isLoadingDescription ? (
+                      <div className="animate-pulse space-y-3">
+                        <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-full"></div>
+                        <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-5/6"></div>
+                        <div className="h-4 bg-slate-200 dark:bg-slate-700 rounded w-4/6"></div>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 mt-4 flex items-center gap-2">
+                          <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          Generating AI description...
+                        </p>
+                      </div>
+                    ) : descriptionError ? (
+                      <div className="bg-red-50 dark:bg-red-900/20 rounded-lg p-4 border border-red-200 dark:border-red-800">
+                        <p className="text-red-700 dark:text-red-400 text-sm mb-2">{descriptionError}</p>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDescriptionError(null);
+                            setIsLoadingDescription(false);
+                            // Re-trigger fetch by toggling a flag or manually calling
+                            const triggerRefetch = async () => {
+                              setIsLoadingDescription(true);
+                              try {
+                                const response = await fetch('/langgraph/generate-description', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  credentials: 'include',
+                                  body: JSON.stringify({
+                                    propertyCode: property.code,
+                                    propertyData: property,
+                                    language: 'english',
+                                  }),
+                                });
+                                if (!response.ok) throw new Error('Failed to generate description');
+                                const data = await response.json();
+                                setEnhancedProperty((prev) => ({ ...prev!, description: data.description }));
+                              } catch (error) {
+                                setDescriptionError('Unable to generate AI description');
+                              } finally {
+                                setIsLoadingDescription(false);
+                              }
+                            };
+                            triggerRefetch();
+                          }}
+                          className="text-xs text-red-600 dark:text-red-400 hover:underline font-medium"
+                        >
+                          Retry
+                        </button>
+                      </div>
+                    ) : displayProperty.description && displayProperty.description !== "Property Description" ? (
                       <p className="text-slate-700 dark:text-slate-300 leading-relaxed">
-                        {property.description}
+                        {displayProperty.description}
                       </p>
-                    </Section>
-                  )}
+                    ) : (
+                      <p className="text-slate-500 dark:text-slate-400 italic text-sm">
+                        No description available
+                      </p>
+                    )}
+                  </Section>
 
                   {/* Features & Amenities */}
                   {amenitiesList.length > 0 && (
@@ -565,73 +684,73 @@ export function PropertyDetailModal({
                   {/* Property Overview */}
                   <Section title="🏠 Property Overview" className="mb-6">
                     <div className="space-y-3">
-                      {property.type && (
-                        <DetailRow label="Type" value={property.type} />
+                      {displayProperty.type && (
+                        <DetailRow label="Type" value={displayProperty.type} />
                       )}
-                      {(property.constructionYear ?? 0) > 0 && (
-                        <DetailRow label="Construction Year" value={property.constructionYear.toString()} />
+                      {(displayProperty.constructionYear ?? 0) > 0 && (
+                        <DetailRow label="Construction Year" value={displayProperty.constructionYear.toString()} />
                       )}
-                      {property.energyClass && (
+                      {displayProperty.energyClass && (
                         <div className="flex justify-between items-center py-2">
                           <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
                             Energy Class
                           </span>
-                          <span className={`px-3 py-1 rounded-full text-sm font-bold ${getEnergyClassColor(property.energyClass)}`}>
-                            {property.energyClass}
+                          <span className={`px-3 py-1 rounded-full text-sm font-bold ${getEnergyClassColor(displayProperty.energyClass)}`}>
+                            {displayProperty.energyClass}
                           </span>
                         </div>
                       )}
-                      {property.availability && (
+                      {displayProperty.availability && (
                         <div className="flex justify-between items-center py-2">
                           <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
                             Availability
                           </span>
                           <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                            property.availability.toLowerCase() === "vacant"
+                            displayProperty.availability.toLowerCase() === "vacant"
                               ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
                               : "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400"
                           }`}>
-                            {property.availability}
+                            {displayProperty.availability}
                           </span>
                         </div>
                       )}
-                      {property.frames && (
-                        <DetailRow label="Window Frames" value={property.frames} />
+                      {displayProperty.frames && (
+                        <DetailRow label="Window Frames" value={displayProperty.frames} />
                       )}
                       {floorMaterial && (
                         <DetailRow label="Flooring" value={floorMaterial} />
                       )}
-                      {(property.renovationYear ?? 0) > 0 && (
-                        <DetailRow label="Renovation Year" value={property.renovationYear.toString()} />
+                      {(displayProperty.renovationYear ?? 0) > 0 && (
+                        <DetailRow label="Renovation Year" value={displayProperty.renovationYear.toString()} />
                       )}
-                      {property.kaek && (
-                        <DetailRow label="KAEK Code" value={property.kaek} />
+                      {displayProperty.kaek && (
+                        <DetailRow label="KAEK Code" value={displayProperty.kaek} />
                       )}
                     </div>
                   </Section>
 
                   {/* Heating & Climate */}
-                  {(property.heatingType || property.heatingControl) && (
+                  {(displayProperty.heatingType || displayProperty.heatingControl) && (
                     <Section title="🔥 Heating & Climate" className="mb-6">
                       <div className="bg-orange-50 dark:bg-orange-900/20 rounded-lg p-4 border border-orange-200 dark:border-orange-800">
                         <div className="space-y-2">
-                          {property.heatingType && (
+                          {displayProperty.heatingType && (
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium text-orange-900 dark:text-orange-300">
                                 Type:
                               </span>
                               <span className="text-sm text-slate-700 dark:text-slate-300">
-                                {formatHeatingType(property.heatingType)}
+                                {formatHeatingType(displayProperty.heatingType)}
                               </span>
                             </div>
                           )}
-                          {property.heatingControl && (
+                          {displayProperty.heatingControl && (
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium text-orange-900 dark:text-orange-300">
                                 Control:
                               </span>
                               <span className="text-sm text-slate-700 dark:text-slate-300">
-                                {property.heatingControl}
+                                {displayProperty.heatingControl}
                               </span>
                             </div>
                           )}
@@ -643,60 +762,60 @@ export function PropertyDetailModal({
                   {/* Technical Details */}
                   <Section title="🏗️ Technical Details" className="mb-6">
                     <div className="space-y-3">
-                      {(property.plotArea ?? 0) > 0 && (
-                        <DetailRow label="Plot Area" value={`${property.plotArea}m²`} />
+                      {(displayProperty.plotArea ?? 0) > 0 && (
+                        <DetailRow label="Plot Area" value={`${displayProperty.plotArea}m²`} />
                       )}
-                      {(property.basementSize ?? 0) > 0 && (
-                        <DetailRow label="Basement" value={`${property.basementSize}m²`} />
+                      {(displayProperty.basementSize ?? 0) > 0 && (
+                        <DetailRow label="Basement" value={`${displayProperty.basementSize}m²`} />
                       )}
-                      {(property.numberOfFloors ?? 0) > 0 && (
-                        <DetailRow label="Number of Floors" value={property.numberOfFloors.toString()} />
+                      {(displayProperty.numberOfFloors ?? 0) > 0 && (
+                        <DetailRow label="Number of Floors" value={displayProperty.numberOfFloors.toString()} />
                       )}
-                      {(property.numberOfWC ?? 0) > 0 && (
-                        <DetailRow label="WCs" value={property.numberOfWC.toString()} />
+                      {(displayProperty.numberOfWC ?? 0) > 0 && (
+                        <DetailRow label="WCs" value={displayProperty.numberOfWC.toString()} />
                       )}
-                      {(property.masterRoom ?? 0) > 0 && (
-                        <DetailRow label="Master Bedrooms" value={property.masterRoom.toString()} />
+                      {(displayProperty.masterRoom ?? 0) > 0 && (
+                        <DetailRow label="Master Bedrooms" value={displayProperty.masterRoom.toString()} />
                       )}
                     </div>
                   </Section>
 
                   {/* Parking & Storage */}
                   {(
-                    (property.parkingType && property.parkingType.length > 0) ||
-                    (property.parkingSpace ?? 0) > 0 ||
-                    (property.storageArea ?? 0) > 0
+                    (displayProperty.parkingType && displayProperty.parkingType.length > 0) ||
+                    (displayProperty.parkingSpace ?? 0) > 0 ||
+                    (displayProperty.storageArea ?? 0) > 0
                   ) && (
                     <Section title="🚗 Parking & Storage" className="mb-6">
                       <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
                         <div className="space-y-2">
-                          {property.parkingType && property.parkingType.length > 0 && (
+                          {displayProperty.parkingType && displayProperty.parkingType.length > 0 && (
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
                                 Parking:
                               </span>
                               <span className="text-sm text-slate-900 dark:text-slate-100 font-semibold">
-                                {formatParkingType(property.parkingType)}
+                                {formatParkingType(displayProperty.parkingType)}
                               </span>
                             </div>
                           )}
-                          {(property.parkingSpace ?? 0) > 0 && (
+                          {(displayProperty.parkingSpace ?? 0) > 0 && (
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
                                 Parking Spaces:
                               </span>
                               <span className="text-sm text-slate-900 dark:text-slate-100 font-semibold">
-                                {property.parkingSpace}
+                                {displayProperty.parkingSpace}
                               </span>
                             </div>
                           )}
-                          {(property.storageArea ?? 0) > 0 && (
+                          {(displayProperty.storageArea ?? 0) > 0 && (
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
                                 Storage:
                               </span>
                               <span className="text-sm text-slate-900 dark:text-slate-100 font-semibold">
-                                {property.storageArea}m²
+                                {displayProperty.storageArea}m²
                               </span>
                             </div>
                           )}
@@ -706,18 +825,18 @@ export function PropertyDetailModal({
                   )}
 
                   {/* Neighborhood */}
-                  {property.neighborhood && (
+                  {displayProperty.neighborhood && (
                     <Section title="🏘️ Neighborhood" className="mb-6">
                       <div className="bg-indigo-50 dark:bg-indigo-900/20 rounded-lg p-4 border border-indigo-200 dark:border-indigo-800">
                         <p className="text-sm text-slate-700 dark:text-slate-300 leading-relaxed">
-                          {property.neighborhood}
+                          {displayProperty.neighborhood}
                         </p>
                       </div>
                     </Section>
                   )}
 
                   {/* Financial Info (if pre-approval exists) */}
-                  {(property.preApprovalAmmount ?? 0) > 0 && (
+                  {(displayProperty.preApprovalAmmount ?? 0) > 0 && (
                     <Section title="💰 Financial Information" className="mb-6">
                       <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4 border border-purple-200 dark:border-purple-800">
                         <div className="flex justify-between items-center">
@@ -725,12 +844,12 @@ export function PropertyDetailModal({
                             Pre-Approved Amount
                           </span>
                           <span className="text-lg font-bold text-purple-700 dark:text-purple-400">
-                            €{property.preApprovalAmmount.toLocaleString()}
+                            €{displayProperty.preApprovalAmmount.toLocaleString()}
                           </span>
                         </div>
-                        {property.preApproved && (
+                        {displayProperty.preApproved && (
                           <p className="text-xs text-purple-600 dark:text-purple-400 mt-2">
-                            Status: {property.preApproved}
+                            Status: {displayProperty.preApproved}
                           </p>
                         )}
                       </div>

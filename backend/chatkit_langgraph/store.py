@@ -23,6 +23,8 @@ class MemoryStore(Store[dict[str, Any]]):
         self._user_threads: Dict[str, set[str]] = {}
         # Map user_id -> user preferences (favorites, hidden)
         self._preferences: Dict[str, Dict[str, Any]] = {}
+        # Global description cache (property_code -> description) - shared across all users
+        self._global_description_cache: Dict[str, str] = {}
         # Attachments intentionally unsupported; use a real store that enforces auth.
 
     @staticmethod
@@ -269,6 +271,37 @@ class MemoryStore(Store[dict[str, Any]]):
         if property_code in prefs['hidden']:
             del prefs['hidden'][property_code]
         self.update_preferences(user_id, thread_id, prefs)
+
+    # -- Global Description Cache ----------------------------------------
+    def get_global_description(self, property_code: str) -> str | None:
+        """
+        Get cached AI-generated description for a property (global, shared across all users).
+
+        Args:
+            property_code: Property code (e.g., "00000527")
+
+        Returns:
+            Cached description text, or None if not cached
+        """
+        return self._global_description_cache.get(property_code)
+
+    def cache_global_description(self, property_code: str, description: str) -> None:
+        """
+        Cache an AI-generated description globally (shared across all users).
+
+        Args:
+            property_code: Property code (e.g., "00000527")
+            description: Generated description text
+        """
+        self._global_description_cache[property_code] = description
+
+    def clear_global_description_cache(self) -> None:
+        """
+        Clear the entire global description cache.
+
+        Useful for testing or admin operations.
+        """
+        self._global_description_cache.clear()
 
     # -- Files -----------------------------------------------------------
     # These methods are not currently used but required to be compatible with the Store interface.

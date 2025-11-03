@@ -18,6 +18,11 @@ services:
       # Required: LangGraph assistant/graph ID
       - LANGGRAPH_ASSISTANT_ID=${LANGGRAPH_ASSISTANT_ID:-agent}
 
+      # LangGraph Description API (second backend for property descriptions)
+      - LANGGRAPH_DESCRIPTION_API_URL=${LANGGRAPH_DESCRIPTION_API_URL:-https://nbg-webapp-uniko-poc-description-we-dev-01.azurewebsites.net}
+      - LANGGRAPH_DESCRIPTION_ASSISTANT_ID=${LANGGRAPH_DESCRIPTION_ASSISTANT_ID:-agent}
+      - LANGGRAPH_DESCRIPTION_TIMEOUT=${LANGGRAPH_DESCRIPTION_TIMEOUT:-30}
+
       # Required: ChatKit domain key for production
       - VITE_LANGGRAPH_CHATKIT_API_DOMAIN_KEY=${VITE_LANGGRAPH_CHATKIT_API_DOMAIN_KEY:-domain_pk_68fb64ee20288190943636b0dd461fda010641585abac21c}
 

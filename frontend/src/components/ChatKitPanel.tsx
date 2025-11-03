@@ -25,15 +25,6 @@ export function ChatKitPanel({
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const { refreshPreferences, setCurrentThreadId: setPreferencesThreadId } = usePreferences();
 
-  // Refresh preferences periodically to catch server-side updates
-  useEffect(() => {
-    const interval = setInterval(() => {
-      refreshPreferences();
-    }, 5000); // Refresh every 5 seconds
-
-    return () => clearInterval(interval);
-  }, [refreshPreferences]);
-
   const chatkit = useChatKit({
     api: { url: CHATKIT_API_URL, domainKey: CHATKIT_API_DOMAIN_KEY },
     theme: {

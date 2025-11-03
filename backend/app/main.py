@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import sys
 from pathlib import Path
@@ -13,15 +14,28 @@ if str(backend_dir) not in sys.path:
     sys.path.insert(0, str(backend_dir))
 
 from chatkit.server import StreamingResult
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
+from pydantic import BaseModel
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.responses import JSONResponse
 
 from chatkit_langgraph import LangGraphChatKitServer, create_server_from_env
+from chatkit_langgraph.description_client import DescriptionLangGraphClient
 from custom_components import ComponentRegistry
 from custom_components.property_carousel import PropertyCarouselComponent
+
+logger = logging.getLogger(__name__)
+
+
+class GenerateDescriptionRequest(BaseModel):
+    """Request model for description generation."""
+
+    propertyCode: str
+    propertyData: dict[str, Any]
+    language: str = "english"
+
 
 app = FastAPI(title="LangGraph ChatKit Integration API")
 
@@ -297,6 +311,94 @@ async def unhide_property(
     }
 
 
+@app.post("/langgraph/generate-description")
+async def generate_description(
+    body: GenerateDescriptionRequest,
+    request: Request,
+    server: LangGraphChatKitServer = Depends(get_langgraph_server),
+) -> dict[str, Any]:
+    """
+    Generate AI property description using the second LangGraph backend.
+
+    This endpoint:
+    - Checks global cache for existing description
+    - If cached: returns immediately
+    - If not cached: calls second LangGraph API and caches result
+
+    Request body:
+        {
+            "propertyCode": "00000527",
+            "propertyData": { ... full property object ... },
+            "language": "english"  // optional, default: "english"
+        }
+
+    Returns:
+        {
+            "description": "Generated description text...",
+            "cached": true/false,
+            "propertyCode": "00000527"
+        }
+    """
+    property_code = body.propertyCode
+    property_data = body.propertyData
+    language = body.language
+
+    logger.info(f"Description requested for property {property_code} (language={language})")
+
+    # Check global cache first
+    cached_description = server.store.get_global_description(property_code)
+    if cached_description:
+        return {
+            "description": cached_description,
+            "cached": True,
+            "propertyCode": property_code,
+        }
+
+    # Not cached - initialize description client and generate
+    desc_api_url = os.getenv("LANGGRAPH_DESCRIPTION_API_URL")
+    if not desc_api_url:
+        logger.error("LANGGRAPH_DESCRIPTION_API_URL not configured")
+        raise HTTPException(
+            status_code=500,
+            detail="Description service not configured. Please set LANGGRAPH_DESCRIPTION_API_URL.",
+        )
+
+    desc_assistant_id = os.getenv("LANGGRAPH_DESCRIPTION_ASSISTANT_ID", "agent")
+    desc_timeout = int(os.getenv("LANGGRAPH_DESCRIPTION_TIMEOUT", "30"))
+
+    desc_client = DescriptionLangGraphClient(
+        base_url=desc_api_url,
+        assistant_id=desc_assistant_id,
+        timeout=desc_timeout,
+    )
+
+    try:
+        # Generate description via second LangGraph API
+        description = await desc_client.generate_description(
+            property_data=property_data,
+            language=language,
+        )
+
+        # Cache globally for all users
+        server.store.cache_global_description(property_code, description)
+
+        return {
+            "description": description,
+            "cached": False,
+            "propertyCode": property_code,
+        }
+
+    except Exception as e:
+        logger.error(
+            f"Failed to generate description for property {property_code}: {e}",
+            exc_info=True
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate description: {str(e)}",
+        )
+
+
 @app.get("/")
 async def root() -> dict[str, str]:
     """Root endpoint with API information."""
@@ -306,4 +408,5 @@ async def root() -> dict[str, str]:
         "chatkit_endpoint": "/langgraph/chatkit",
         "health_endpoint": "/langgraph/health",
         "preferences_endpoint": "/langgraph/preferences",
+        "generate_description_endpoint": "/langgraph/generate-description",
     }
