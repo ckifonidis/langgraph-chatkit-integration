@@ -55,6 +55,56 @@ def _is_tool_completion_item(item: Any) -> bool:
     return isinstance(item, ClientToolCallItem)
 
 
+def _transform_property_coordinates(properties: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """
+    Transform geoPoint string coordinates to GeoJSON format.
+
+    LangGraph API returns: "geoPoint": "38.88867815432092,22.425554227711005"
+    Frontend expects: "geoPoint": {"coordinates": [22.425554227711005, 38.88867815432092]}
+
+    Args:
+        properties: List of property dictionaries from LangGraph API
+
+    Returns:
+        List of properties with transformed coordinates
+    """
+    for prop in properties:
+        try:
+            address = prop.get("address")
+            if not address or not isinstance(address, dict):
+                continue
+
+            geo_point = address.get("geoPoint")
+            if not geo_point or not isinstance(geo_point, str):
+                continue
+
+            # Parse "latitude,longitude" string
+            parts = geo_point.split(",")
+            if len(parts) != 2:
+                logger.warning(f"Invalid geoPoint format: {geo_point}")
+                continue
+
+            try:
+                lat = float(parts[0].strip())
+                lng = float(parts[1].strip())
+
+                # Transform to GeoJSON format: [longitude, latitude]
+                address["geoPoint"] = {
+                    "type": "Point",
+                    "coordinates": [lng, lat]
+                }
+                logger.debug(f"Transformed coordinates for property {prop.get('code', 'unknown')}: [{lng}, {lat}]")
+            except (ValueError, IndexError) as e:
+                logger.warning(f"Failed to parse coordinates '{geo_point}': {e}")
+                continue
+
+        except Exception as e:
+            logger.error(f"Error transforming coordinates for property: {e}")
+            continue
+
+    return properties
+
+
 class MessageHandler(ABC):
     """
     Abstract base class for custom message handlers.
@@ -295,6 +345,12 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
 
             # Check if we have query results (property search response)
             has_query_results = final_event and len(final_event.get("query_results", [])) > 0
+
+            # Transform property coordinates from string to GeoJSON format
+            if has_query_results and final_event:
+                query_results = final_event.get("query_results", [])
+                _transform_property_coordinates(query_results)
+                print(f"[DEBUG] Transformed coordinates for {len(query_results)} properties")
 
             # Handle response based on what we received
             if final_ai_message:

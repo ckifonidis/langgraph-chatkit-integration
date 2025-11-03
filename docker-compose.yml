@@ -13,7 +13,7 @@ services:
       - "8080:80"
     environment:
       # Required: Your LangGraph API endpoint
-      - LANGGRAPH_API_URL=${LANGGRAPH_API_URL:-https://nbg-webapp-cc-lg-test-we-dev-01-axhqfbexe3eeerbn.westeurope-01.azurewebsites.net}
+      - LANGGRAPH_API_URL=${LANGGRAPH_API_URL:-https://nbg-webapp-uniko-db-we-dev-01.azurewebsites.net}
 
       # Required: LangGraph assistant/graph ID
       - LANGGRAPH_ASSISTANT_ID=${LANGGRAPH_ASSISTANT_ID:-agent}
