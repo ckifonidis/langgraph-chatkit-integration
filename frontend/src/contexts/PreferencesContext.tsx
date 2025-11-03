@@ -16,16 +16,9 @@ interface PropertyData {
   [key: string]: any;
 }
 
-interface SavedSearch {
-  query: string;
-  timestamp: string;
-  metadata?: Record<string, any>;
-}
-
 interface Preferences {
   favorites: Record<string, PropertyData>;
   hidden: Record<string, PropertyData>;
-  saved_searches: Record<string, SavedSearch>;
   version: number;
 }
 
@@ -33,7 +26,9 @@ interface PreferencesContextType {
   preferences: Preferences;
   loading: boolean;
   error: string | null;
-  refreshPreferences: () => Promise<void>;
+  currentThreadId: string | null;
+  setCurrentThreadId: (threadId: string | null) => void;
+  refreshPreferences: (threadId?: string) => Promise<void>;
 }
 
 const PreferencesContext = createContext<PreferencesContextType | undefined>(undefined);
@@ -46,16 +41,25 @@ export function PreferencesProvider({ children }: PreferencesProviderProps) {
   const [preferences, setPreferences] = useState<Preferences>({
     favorites: {},
     hidden: {},
-    saved_searches: {},
-    version: 2,
+    version: 3,  // v3 = thread-specific
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
 
-  const refreshPreferences = async () => {
+  const refreshPreferences = async (threadId?: string) => {
+    // Use provided threadId or current one
+    const targetThreadId = threadId || currentThreadId;
+
+    // Don't fetch if no thread ID available
+    if (!targetThreadId) {
+      setLoading(false);
+      return;
+    }
+
     try {
       setError(null);
-      const response = await fetch('/langgraph/preferences', {
+      const response = await fetch(`/langgraph/preferences?thread_id=${encodeURIComponent(targetThreadId)}`, {
         credentials: 'include', // Include session cookie
       });
 
@@ -77,15 +81,19 @@ export function PreferencesProvider({ children }: PreferencesProviderProps) {
     }
   };
 
-  // Fetch preferences on mount
+  // Refresh preferences when thread changes
   useEffect(() => {
-    refreshPreferences();
-  }, []);
+    if (currentThreadId) {
+      refreshPreferences(currentThreadId);
+    }
+  }, [currentThreadId]);
 
   const value: PreferencesContextType = {
     preferences,
     loading,
     error,
+    currentThreadId,
+    setCurrentThreadId,
     refreshPreferences,
   };
 
@@ -120,15 +128,4 @@ export function getFavoritesCount(preferences: Preferences): number {
 
 export function getHiddenCount(preferences: Preferences): number {
   return Object.keys(preferences.hidden).length;
-}
-
-export function getSavedSearchesArray(preferences: Preferences): Array<SavedSearch & { id: string }> {
-  return Object.entries(preferences.saved_searches || {}).map(([id, search]) => ({
-    id,
-    ...search,
-  }));
-}
-
-export function getSavedSearchesCount(preferences: Preferences): number {
-  return Object.keys(preferences.saved_searches || {}).length;
 }

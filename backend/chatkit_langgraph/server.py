@@ -299,10 +299,11 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
         Yields:
             ChatKit thread stream events
         """
-        # Load user preferences from store
+        # Load thread-specific user preferences from store
         user_id = context.get("user_id", "anonymous")
-        user_preferences = self.store.get_preferences(user_id)
-        print(f"[DEBUG] User preferences loaded: favorites={len(user_preferences.get('favorites', []))}, hidden={len(user_preferences.get('hidden', []))}")
+        thread_id = thread.id  # ChatKit thread ID
+        user_preferences = self.store.get_preferences(user_id, thread_id)
+        print(f"[DEBUG] Thread-specific preferences loaded for thread={thread_id}: favorites={len(user_preferences.get('favorites', []))}, hidden={len(user_preferences.get('hidden', []))}")
 
         # Map ChatKit thread ID to LangGraph UUID
         # Simple: if mapping exists, reuse it; otherwise create new UUID
@@ -502,56 +503,38 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
         if False:
             yield  # type: ignore
 
-        # Get user ID from context
+        # Get user ID and thread ID from context
         user_id = context.get("user_id", "anonymous")
+        thread_id = thread.id  # ChatKit thread ID
 
         # Handle toggle_favorite action
         if action.type == "toggle_favorite":
             property_code = action.payload.get("propertyCode")
             property_data = action.payload.get("item_data", {})
             if property_code and property_data:
-                # Update preferences silently (no immediate re-render)
-                prefs = self.store.get_preferences(user_id)
+                # Update thread-specific preferences silently (no immediate re-render)
+                prefs = self.store.get_preferences(user_id, thread_id)
                 if property_code in prefs['favorites']:
-                    self.store.remove_favorite(user_id, property_code)
-                    logger.info(f"Removed {property_code} from favorites for user {user_id[:8]}")
+                    self.store.remove_favorite(user_id, property_code, thread_id)
+                    logger.info(f"Removed {property_code} from favorites for user {user_id[:8]} in thread {thread_id}")
                 else:
-                    self.store.add_favorite(user_id, property_code, property_data)
-                    logger.info(f"Added {property_code} to favorites for user {user_id[:8]}")
+                    self.store.add_favorite(user_id, property_code, property_data, thread_id)
+                    logger.info(f"Added {property_code} to favorites for user {user_id[:8]} in thread {thread_id}")
 
-                # Preferences will be used on next search/query
-                print(f"[DEBUG] Updated preferences: {len(self.store.get_preferences(user_id).get('favorites', {}))} favorites")
+                # Preferences will be used on next search/query in this thread
+                print(f"[DEBUG] Updated thread preferences: {len(self.store.get_preferences(user_id, thread_id).get('favorites', {}))} favorites")
 
         # Handle hide_property action
         elif action.type == "hide_property":
             property_code = action.payload.get("propertyCode")
             property_data = action.payload.get("item_data", {})
             if property_code and property_data:
-                # Update preferences silently (no immediate re-render)
-                self.store.hide_property(user_id, property_code, property_data)
-                logger.info(f"Hidden property {property_code} for user {user_id[:8]}")
+                # Update thread-specific preferences silently (no immediate re-render)
+                self.store.hide_property(user_id, property_code, property_data, thread_id)
+                logger.info(f"Hidden property {property_code} for user {user_id[:8]} in thread {thread_id}")
 
-                # Preferences will be used on next search/query
-                print(f"[DEBUG] Updated preferences: {len(self.store.get_preferences(user_id).get('hidden', {}))} hidden")
-
-        # Handle save_search action
-        elif action.type == "save_search":
-            query = action.payload.get("query")
-            search_id = action.payload.get("searchId")
-            if query and search_id:
-                # Save the search query
-                self.store.save_search(user_id, search_id, query)
-                logger.info(f"Saved search '{query}' for user {user_id[:8]}")
-                print(f"[DEBUG] Saved search: {search_id}")
-
-        # Handle delete_saved_search action
-        elif action.type == "delete_saved_search":
-            search_id = action.payload.get("searchId")
-            if search_id:
-                # Delete the saved search
-                self.store.delete_saved_search(user_id, search_id)
-                logger.info(f"Deleted saved search {search_id} for user {user_id[:8]}")
-                print(f"[DEBUG] Deleted saved search: {search_id}")
+                # Preferences will be used on next search/query in this thread
+                print(f"[DEBUG] Updated thread preferences: {len(self.store.get_preferences(user_id, thread_id).get('hidden', {}))} hidden")
 
     async def to_message_content(
         self, _input: Attachment

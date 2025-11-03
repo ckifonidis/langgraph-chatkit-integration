@@ -179,131 +179,96 @@ class MemoryStore(Store[dict[str, Any]]):
         self._threads[thread_id].items = [item for item in items if item.id != item_id]
 
     # -- User Preferences ------------------------------------------------
-    def get_preferences(self, user_id: str) -> Dict[str, Any]:
+    def get_preferences(self, user_id: str, thread_id: str) -> Dict[str, Any]:
         """
-        Get user preferences (favorites, hidden properties, saved searches).
+        Get thread-specific user preferences (favorites, hidden properties).
 
         Args:
             user_id: The user ID from session
+            thread_id: The thread ID (conversation ID)
 
         Returns:
-            Dictionary with favorites, hidden, and saved_searches dicts
+            Dictionary with favorites and hidden dicts for this thread
         """
-        return self._preferences.get(user_id, {
+        # Ensure user exists in preferences
+        if user_id not in self._preferences:
+            self._preferences[user_id] = {}
+
+        # Return thread-specific preferences, or default empty structure
+        return self._preferences[user_id].get(thread_id, {
             'favorites': {},
             'hidden': {},
-            'saved_searches': {},
-            'version': 2
+            'version': 3  # v3 = thread-specific schema
         })
 
-    def update_preferences(self, user_id: str, preferences: Dict[str, Any]) -> None:
+    def update_preferences(self, user_id: str, thread_id: str, preferences: Dict[str, Any]) -> None:
         """
-        Update entire user preferences dictionary.
+        Update entire thread-specific preferences dictionary.
 
         Args:
             user_id: The user ID from session
-            preferences: Complete preferences dictionary
+            thread_id: The thread ID (conversation ID)
+            preferences: Complete preferences dictionary for this thread
         """
-        self._preferences[user_id] = preferences
+        if user_id not in self._preferences:
+            self._preferences[user_id] = {}
+        self._preferences[user_id][thread_id] = preferences
 
-    def add_favorite(self, user_id: str, property_code: str, property_data: Dict[str, Any]) -> None:
+    def add_favorite(self, user_id: str, property_code: str, property_data: Dict[str, Any], thread_id: str) -> None:
         """
-        Add a property to user's favorites with full property data.
+        Add a property to thread-specific favorites with full property data.
 
         Args:
             user_id: The user ID from session
             property_code: Property code to favorite
             property_data: Complete property object (title, price, image, etc.)
+            thread_id: The thread ID (conversation ID)
         """
-        prefs = self.get_preferences(user_id)
+        prefs = self.get_preferences(user_id, thread_id)
         prefs['favorites'][property_code] = property_data
-        self._preferences[user_id] = prefs
+        self.update_preferences(user_id, thread_id, prefs)
 
-    def remove_favorite(self, user_id: str, property_code: str) -> None:
+    def remove_favorite(self, user_id: str, property_code: str, thread_id: str) -> None:
         """
-        Remove a property from user's favorites.
+        Remove a property from thread-specific favorites.
 
         Args:
             user_id: The user ID from session
             property_code: Property code to unfavorite
+            thread_id: The thread ID (conversation ID)
         """
-        prefs = self.get_preferences(user_id)
+        prefs = self.get_preferences(user_id, thread_id)
         if property_code in prefs['favorites']:
             del prefs['favorites'][property_code]
-        self._preferences[user_id] = prefs
+        self.update_preferences(user_id, thread_id, prefs)
 
-    def hide_property(self, user_id: str, property_code: str, property_data: Dict[str, Any]) -> None:
+    def hide_property(self, user_id: str, property_code: str, property_data: Dict[str, Any], thread_id: str) -> None:
         """
-        Add a property to user's hidden list with full property data.
+        Add a property to thread-specific hidden list with full property data.
 
         Args:
             user_id: The user ID from session
             property_code: Property code to hide
             property_data: Complete property object (title, price, image, etc.)
+            thread_id: The thread ID (conversation ID)
         """
-        prefs = self.get_preferences(user_id)
+        prefs = self.get_preferences(user_id, thread_id)
         prefs['hidden'][property_code] = property_data
-        self._preferences[user_id] = prefs
+        self.update_preferences(user_id, thread_id, prefs)
 
-    def unhide_property(self, user_id: str, property_code: str) -> None:
+    def unhide_property(self, user_id: str, property_code: str, thread_id: str) -> None:
         """
-        Remove a property from user's hidden list.
+        Remove a property from thread-specific hidden list.
 
         Args:
             user_id: The user ID from session
             property_code: Property code to unhide
+            thread_id: The thread ID (conversation ID)
         """
-        prefs = self.get_preferences(user_id)
+        prefs = self.get_preferences(user_id, thread_id)
         if property_code in prefs['hidden']:
             del prefs['hidden'][property_code]
-        self._preferences[user_id] = prefs
-
-    def save_search(self, user_id: str, search_id: str, query: str, metadata: Dict[str, Any] = None) -> None:
-        """
-        Save a search query for quick re-running later.
-
-        Args:
-            user_id: The user ID from session
-            search_id: Unique identifier for this saved search
-            query: The search query text
-            metadata: Optional metadata (filters, etc.)
-        """
-        prefs = self.get_preferences(user_id)
-        if 'saved_searches' not in prefs:
-            prefs['saved_searches'] = {}
-
-        prefs['saved_searches'][search_id] = {
-            'query': query,
-            'timestamp': datetime.now().isoformat(),
-            'metadata': metadata or {}
-        }
-        self._preferences[user_id] = prefs
-
-    def delete_saved_search(self, user_id: str, search_id: str) -> None:
-        """
-        Delete a saved search.
-
-        Args:
-            user_id: The user ID from session
-            search_id: Unique identifier of the saved search to delete
-        """
-        prefs = self.get_preferences(user_id)
-        if 'saved_searches' in prefs and search_id in prefs['saved_searches']:
-            del prefs['saved_searches'][search_id]
-        self._preferences[user_id] = prefs
-
-    def get_saved_searches(self, user_id: str) -> Dict[str, Any]:
-        """
-        Get all saved searches for a user.
-
-        Args:
-            user_id: The user ID from session
-
-        Returns:
-            Dictionary of search_id -> search_data
-        """
-        prefs = self.get_preferences(user_id)
-        return prefs.get('saved_searches', {})
+        self.update_preferences(user_id, thread_id, prefs)
 
     # -- Files -----------------------------------------------------------
     # These methods are not currently used but required to be compatible with the Store interface.

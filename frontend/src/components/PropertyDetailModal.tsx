@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useState, useRef } from "react";
 import { Dialog, Transition } from "@headlessui/react";
 import { XMarkIcon, CheckIcon, XCircleIcon, StarIcon } from "@heroicons/react/24/outline";
 import { StarIcon as StarIconSolid } from "@heroicons/react/24/solid";
@@ -172,9 +172,10 @@ export function PropertyDetailModal({
   property,
 }: PropertyDetailModalProps) {
   const [mapsLoaded, setMapsLoaded] = useState(false);
-  const { preferences, refreshPreferences } = usePreferences();
+  const { preferences, refreshPreferences, currentThreadId } = usePreferences();
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
   const [isHiding, setIsHiding] = useState(false);
+  const mapInstanceRef = useRef<any>(null);
 
   // Get API key
   const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
@@ -185,13 +186,13 @@ export function PropertyDetailModal({
 
   // Handle favorite toggle
   const handleToggleFavorite = async () => {
-    if (!property?.code) return;
+    if (!property?.code || !currentThreadId) return;
 
     setIsTogglingFavorite(true);
     try {
       if (isFavorited) {
         // Remove from favorites
-        const response = await fetch(`/langgraph/preferences/favorites/${property.code}`, {
+        const response = await fetch(`/langgraph/preferences/favorites/${property.code}?thread_id=${encodeURIComponent(currentThreadId)}`, {
           method: 'DELETE',
           credentials: 'include',
         });
@@ -207,6 +208,7 @@ export function PropertyDetailModal({
           },
           credentials: 'include',
           body: JSON.stringify({
+            thread_id: currentThreadId,
             propertyCode: property.code,
             propertyData: property,
           }),
@@ -224,13 +226,13 @@ export function PropertyDetailModal({
 
   // Handle hide/unhide toggle
   const handleToggleHide = async () => {
-    if (!property?.code) return;
+    if (!property?.code || !currentThreadId) return;
 
     setIsHiding(true);
     try {
       if (isHidden) {
         // Unhide property
-        const response = await fetch(`/langgraph/preferences/hidden/${property.code}`, {
+        const response = await fetch(`/langgraph/preferences/hidden/${property.code}?thread_id=${encodeURIComponent(currentThreadId)}`, {
           method: 'DELETE',
           credentials: 'include',
         });
@@ -246,6 +248,7 @@ export function PropertyDetailModal({
           },
           credentials: 'include',
           body: JSON.stringify({
+            thread_id: currentThreadId,
             propertyCode: property.code,
             propertyData: property,
           }),
@@ -275,6 +278,13 @@ export function PropertyDetailModal({
     script.onload = () => setMapsLoaded(true);
     document.head.appendChild(script);
   }, [mapsApiKey]);
+
+  // Reset map instance when modal closes or property changes
+  useEffect(() => {
+    if (!isOpen) {
+      mapInstanceRef.current = null;
+    }
+  }, [isOpen, property?.code]);
 
   if (!property) return null;
 
@@ -456,24 +466,29 @@ export function PropertyDetailModal({
                               ref={(el) => {
                                 if (!el || !window.google) return;
 
-                                const map = new window.google.maps.Map(el, {
-                                  center: { lat, lng },
-                                  zoom: 14,
-                                  mapTypeControl: true,
-                                  streetViewControl: false,
-                                  gestureHandling: 'cooperative',
-                                });
+                                // Only create map if it doesn't exist yet
+                                if (!mapInstanceRef.current) {
+                                  const map = new window.google.maps.Map(el, {
+                                    center: { lat, lng },
+                                    zoom: 14,
+                                    mapTypeControl: true,
+                                    streetViewControl: false,
+                                    gestureHandling: 'cooperative',
+                                  });
 
-                                new window.google.maps.Circle({
-                                  center: { lat, lng },
-                                  radius: 500, // 500 meters - same for all properties
-                                  strokeColor: '#00BA88',
-                                  strokeOpacity: 1,
-                                  strokeWeight: 2,
-                                  fillColor: '#00BA88',
-                                  fillOpacity: 0.25,
-                                  map: map,
-                                });
+                                  new window.google.maps.Circle({
+                                    center: { lat, lng },
+                                    radius: 500, // 500 meters - same for all properties
+                                    strokeColor: '#00BA88',
+                                    strokeOpacity: 1,
+                                    strokeWeight: 2,
+                                    fillColor: '#00BA88',
+                                    fillOpacity: 0.25,
+                                    map: map,
+                                  });
+
+                                  mapInstanceRef.current = map;
+                                }
                               }}
                               className="w-full h-[350px] rounded-xl border border-slate-200 dark:border-slate-700 shadow-lg"
                             />

@@ -22,7 +22,8 @@ export function ChatKitPanel({
 }: ChatKitPanelProps) {
   const [selectedProperty, setSelectedProperty] = useState<any | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const { refreshPreferences } = usePreferences();
+  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
+  const { refreshPreferences, setCurrentThreadId: setPreferencesThreadId } = usePreferences();
 
   // Refresh preferences periodically to catch server-side updates
   useEffect(() => {
@@ -44,11 +45,11 @@ export function ChatKitPanel({
           shade: theme === "dark" ? -1 : -4,
         },
         accent: {
-          primary: "#00BA88", // Uniko green
+          primary: "#000000", // Black for send button
           level: 1,
         },
       },
-      radius: "round",
+      radius: "pill", // Makes buttons pill-shaped (most circular option)
     },
     startScreen: {
       greeting: GREETING,
@@ -60,6 +61,13 @@ export function ChatKitPanel({
     threadItemActions: {
       feedback: false,
     },
+    onThreadChange: (event) => {
+      setCurrentThreadId(event.threadId);
+      setPreferencesThreadId(event.threadId);  // Update preferences context
+      if (import.meta.env.DEV) {
+        console.debug("[ChatKitPanel] Thread changed:", event.threadId);
+      }
+    },
     widgets: {
       async onAction(action, widgetItem) {
         if (import.meta.env.DEV) {
@@ -70,6 +78,7 @@ export function ChatKitPanel({
         if (action.type === "view_item_details") {
           const propertyData = action.payload?.item_data;
           if (propertyData) {
+            console.log("[DEBUG] Opening property modal - Thread ID:", currentThreadId, "Property:", propertyData.code);
             setSelectedProperty(propertyData);
             setIsModalOpen(true);
           }
@@ -106,22 +115,6 @@ export function ChatKitPanel({
       console.error("ChatKit error", error);
     },
   });
-
-  // Listen for saved search run events
-  useEffect(() => {
-    const handleRunSavedSearch = (event: CustomEvent) => {
-      const { query } = event.detail;
-      if (query && chatkit.control) {
-        chatkit.control.sendMessage(query);
-      }
-    };
-
-    window.addEventListener('run-saved-search', handleRunSavedSearch as EventListener);
-
-    return () => {
-      window.removeEventListener('run-saved-search', handleRunSavedSearch as EventListener);
-    };
-  }, [chatkit.control]);
 
   return (
     <>

@@ -22,7 +22,6 @@ from starlette.responses import JSONResponse
 from chatkit_langgraph import LangGraphChatKitServer, create_server_from_env
 from custom_components import ComponentRegistry
 from custom_components.property_carousel import PropertyCarouselComponent
-from custom_components.save_search_button import SaveSearchButtonComponent
 
 app = FastAPI(title="LangGraph ChatKit Integration API")
 
@@ -49,7 +48,6 @@ app.add_middleware(
 # Initialize component registry with custom components
 component_registry = ComponentRegistry()
 component_registry.register(PropertyCarouselComponent(max_items=50))
-component_registry.register(SaveSearchButtonComponent())
 
 # Initialize the server with custom components
 _langgraph_server: LangGraphChatKitServer | None = create_server_from_env(
@@ -115,14 +113,18 @@ async def health_check() -> dict[str, Any]:
 
 @app.get("/langgraph/preferences")
 async def get_preferences(
+    thread_id: str,  # Required query parameter
     request: Request,
     server: LangGraphChatKitServer = Depends(get_langgraph_server),
 ) -> dict[str, Any]:
     """
-    Get user preferences (favorites, hidden properties, and saved searches).
+    Get thread-specific user preferences (favorites, hidden properties).
+
+    Args:
+        thread_id: The ChatKit thread ID (required query parameter)
 
     Returns:
-        Dictionary with favorites, hidden, saved_searches, and version
+        Dictionary with favorites, hidden, and version for this thread
     """
     # Get or create user session ID
     if "user_id" not in request.session:
@@ -130,10 +132,11 @@ async def get_preferences(
         request.session["user_id"] = str(uuid.uuid4())
 
     user_id = request.session["user_id"]
-    preferences = server.store.get_preferences(user_id)
+    preferences = server.store.get_preferences(user_id, thread_id)
 
     return {
         "user_id": user_id[:8],  # Return truncated user_id for debugging
+        "thread_id": thread_id,
         "preferences": preferences,
     }
 
@@ -144,16 +147,17 @@ async def add_favorite(
     server: LangGraphChatKitServer = Depends(get_langgraph_server),
 ) -> dict[str, Any]:
     """
-    Add a property to user's favorites.
+    Add a property to thread-specific favorites.
 
     Request body:
         {
+            "thread_id": "thr_abc123",
             "propertyCode": "PROP001",
             "propertyData": { ... full property object ... }
         }
 
     Returns:
-        Updated preferences
+        Updated preferences for this thread
     """
     # Get user session ID
     if "user_id" not in request.session:
@@ -163,17 +167,18 @@ async def add_favorite(
 
     # Get request body
     body = await request.json()
+    thread_id = body.get("thread_id")
     property_code = body.get("propertyCode")
     property_data = body.get("propertyData", {})
 
-    if not property_code or not property_data:
-        return {"error": "propertyCode and propertyData are required"}
+    if not thread_id or not property_code or not property_data:
+        return {"error": "thread_id, propertyCode and propertyData are required"}
 
-    # Add to favorites
-    server.store.add_favorite(user_id, property_code, property_data)
+    # Add to thread-specific favorites
+    server.store.add_favorite(user_id, property_code, property_data, thread_id)
 
-    # Return updated preferences
-    preferences = server.store.get_preferences(user_id)
+    # Return updated preferences for this thread
+    preferences = server.store.get_preferences(user_id, thread_id)
     return {
         "success": True,
         "preferences": preferences,
@@ -183,17 +188,19 @@ async def add_favorite(
 @app.delete("/langgraph/preferences/favorites/{property_code}")
 async def remove_favorite(
     property_code: str,
+    thread_id: str,  # Required query parameter
     request: Request,
     server: LangGraphChatKitServer = Depends(get_langgraph_server),
 ) -> dict[str, Any]:
     """
-    Remove a property from user's favorites.
+    Remove a property from thread-specific favorites.
 
     Args:
         property_code: Property code to remove
+        thread_id: The ChatKit thread ID (required query parameter)
 
     Returns:
-        Updated preferences
+        Updated preferences for this thread
     """
     # Get user session ID
     if "user_id" not in request.session:
@@ -201,11 +208,11 @@ async def remove_favorite(
 
     user_id = request.session["user_id"]
 
-    # Remove from favorites
-    server.store.remove_favorite(user_id, property_code)
+    # Remove from thread-specific favorites
+    server.store.remove_favorite(user_id, property_code, thread_id)
 
-    # Return updated preferences
-    preferences = server.store.get_preferences(user_id)
+    # Return updated preferences for this thread
+    preferences = server.store.get_preferences(user_id, thread_id)
     return {
         "success": True,
         "preferences": preferences,
@@ -218,16 +225,17 @@ async def hide_property_endpoint(
     server: LangGraphChatKitServer = Depends(get_langgraph_server),
 ) -> dict[str, Any]:
     """
-    Hide a property.
+    Hide a property in a specific thread.
 
     Request body:
         {
+            "thread_id": "thr_abc123",
             "propertyCode": "PROP001",
             "propertyData": { ... full property object ... }
         }
 
     Returns:
-        Updated preferences
+        Updated preferences for this thread
     """
     # Get user session ID
     if "user_id" not in request.session:
@@ -237,17 +245,18 @@ async def hide_property_endpoint(
 
     # Get request body
     body = await request.json()
+    thread_id = body.get("thread_id")
     property_code = body.get("propertyCode")
     property_data = body.get("propertyData", {})
 
-    if not property_code or not property_data:
-        return {"error": "propertyCode and propertyData are required"}
+    if not thread_id or not property_code or not property_data:
+        return {"error": "thread_id, propertyCode and propertyData are required"}
 
-    # Hide property
-    server.store.hide_property(user_id, property_code, property_data)
+    # Hide property in this thread
+    server.store.hide_property(user_id, property_code, property_data, thread_id)
 
-    # Return updated preferences
-    preferences = server.store.get_preferences(user_id)
+    # Return updated preferences for this thread
+    preferences = server.store.get_preferences(user_id, thread_id)
     return {
         "success": True,
         "preferences": preferences,
@@ -257,17 +266,19 @@ async def hide_property_endpoint(
 @app.delete("/langgraph/preferences/hidden/{property_code}")
 async def unhide_property(
     property_code: str,
+    thread_id: str,  # Required query parameter
     request: Request,
     server: LangGraphChatKitServer = Depends(get_langgraph_server),
 ) -> dict[str, Any]:
     """
-    Remove a property from user's hidden list (unhide it).
+    Remove a property from thread-specific hidden list (unhide it).
 
     Args:
         property_code: Property code to unhide
+        thread_id: The ChatKit thread ID (required query parameter)
 
     Returns:
-        Updated preferences
+        Updated preferences for this thread
     """
     # Get user session ID
     if "user_id" not in request.session:
@@ -275,43 +286,11 @@ async def unhide_property(
 
     user_id = request.session["user_id"]
 
-    # Unhide property
-    server.store.unhide_property(user_id, property_code)
+    # Unhide property in this thread
+    server.store.unhide_property(user_id, property_code, thread_id)
 
-    # Return updated preferences
-    preferences = server.store.get_preferences(user_id)
-    return {
-        "success": True,
-        "preferences": preferences,
-    }
-
-
-@app.delete("/langgraph/preferences/saved-searches/{search_id}")
-async def delete_saved_search_endpoint(
-    search_id: str,
-    request: Request,
-    server: LangGraphChatKitServer = Depends(get_langgraph_server),
-) -> dict[str, Any]:
-    """
-    Delete a saved search.
-
-    Args:
-        search_id: Saved search ID to delete
-
-    Returns:
-        Updated preferences
-    """
-    # Get user session ID
-    if "user_id" not in request.session:
-        return {"error": "No session found"}
-
-    user_id = request.session["user_id"]
-
-    # Delete saved search
-    server.store.delete_saved_search(user_id, search_id)
-
-    # Return updated preferences
-    preferences = server.store.get_preferences(user_id)
+    # Return updated preferences for this thread
+    preferences = server.store.get_preferences(user_id, thread_id)
     return {
         "success": True,
         "preferences": preferences,
