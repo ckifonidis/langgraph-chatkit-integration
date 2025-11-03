@@ -16,9 +16,16 @@ interface PropertyData {
   [key: string]: any;
 }
 
+interface SavedSearch {
+  query: string;
+  timestamp: string;
+  metadata?: Record<string, any>;
+}
+
 interface Preferences {
   favorites: Record<string, PropertyData>;
   hidden: Record<string, PropertyData>;
+  saved_searches: Record<string, SavedSearch>;
   version: number;
 }
 
@@ -39,6 +46,7 @@ export function PreferencesProvider({ children }: PreferencesProviderProps) {
   const [preferences, setPreferences] = useState<Preferences>({
     favorites: {},
     hidden: {},
+    saved_searches: {},
     version: 2,
   });
   const [loading, setLoading] = useState(true);
@@ -112,4 +120,15 @@ export function getFavoritesCount(preferences: Preferences): number {
 
 export function getHiddenCount(preferences: Preferences): number {
   return Object.keys(preferences.hidden).length;
+}
+
+export function getSavedSearchesArray(preferences: Preferences): Array<SavedSearch & { id: string }> {
+  return Object.entries(preferences.saved_searches || {}).map(([id, search]) => ({
+    id,
+    ...search,
+  }));
+}
+
+export function getSavedSearchesCount(preferences: Preferences): number {
+  return Object.keys(preferences.saved_searches || {}).length;
 }

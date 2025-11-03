@@ -107,6 +107,22 @@ export function ChatKitPanel({
     },
   });
 
+  // Listen for saved search run events
+  useEffect(() => {
+    const handleRunSavedSearch = (event: CustomEvent) => {
+      const { query } = event.detail;
+      if (query && chatkit.control) {
+        chatkit.control.sendMessage(query);
+      }
+    };
+
+    window.addEventListener('run-saved-search', handleRunSavedSearch as EventListener);
+
+    return () => {
+      window.removeEventListener('run-saved-search', handleRunSavedSearch as EventListener);
+    };
+  }, [chatkit.control]);
+
   return (
     <>
       <div className="relative h-full w-full overflow-hidden border border-slate-200/60 bg-white shadow-card dark:border-slate-800/70 dark:bg-slate-900">

@@ -322,7 +322,9 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                 if self.component_registry and final_event:
                     print(f"[DEBUG] Checking components. Event keys: {list(final_event.keys())}")
                     print(f"[DEBUG] Has query_results: {'query_results' in final_event}, count: {len(final_event.get('query_results', []))}")
-                    widgets = self.component_registry.get_widgets(final_event, user_preferences=user_preferences)
+                    # Add user query to response_data for components
+                    response_data_with_query = {**final_event, "_user_query": user_message}
+                    widgets = self.component_registry.get_widgets(response_data_with_query, user_preferences=user_preferences)
                     print(f"[DEBUG] Component registry returned {len(widgets)} widgets")
 
                     # Yield each widget that matched rules
@@ -340,8 +342,9 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
 
             elif has_query_results:
                 # No AI message but we have query results - generate intro message
-                result_count = len(final_event.get("query_results", []))
-                intro_text = f"I found {result_count} properties matching your criteria:"
+                total_count = final_event.get("results_count", len(final_event.get("query_results", [])))
+                showing_count = len(final_event.get("query_results", []))
+                intro_text = f"Showing {showing_count} of {total_count} properties:"
 
                 intro_msg_id = _gen_id("msg")
                 intro_item = AssistantMessageItem(
@@ -352,12 +355,14 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                     status="completed",
                 )
                 yield ThreadItemDoneEvent(item=intro_item)
-                print(f"[DEBUG] Query results without AI message, showing {result_count} results")
+                print(f"[DEBUG] Query results without AI message, showing {showing_count} of {total_count} results")
 
                 # Check component registry for carousel widget
                 if self.component_registry and final_event:
                     print(f"[DEBUG] Checking components for query results")
-                    widgets = self.component_registry.get_widgets(final_event, user_preferences=user_preferences)
+                    # Add user query to response_data for components
+                    response_data_with_query = {**final_event, "_user_query": user_message}
+                    widgets = self.component_registry.get_widgets(response_data_with_query, user_preferences=user_preferences)
                     print(f"[DEBUG] Component registry returned {len(widgets)} widgets")
 
                     for widget in widgets:
@@ -472,6 +477,25 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
 
                 # Preferences will be used on next search/query
                 print(f"[DEBUG] Updated preferences: {len(self.store.get_preferences(user_id).get('hidden', {}))} hidden")
+
+        # Handle save_search action
+        elif action.type == "save_search":
+            query = action.payload.get("query")
+            search_id = action.payload.get("searchId")
+            if query and search_id:
+                # Save the search query
+                self.store.save_search(user_id, search_id, query)
+                logger.info(f"Saved search '{query}' for user {user_id[:8]}")
+                print(f"[DEBUG] Saved search: {search_id}")
+
+        # Handle delete_saved_search action
+        elif action.type == "delete_saved_search":
+            search_id = action.payload.get("searchId")
+            if search_id:
+                # Delete the saved search
+                self.store.delete_saved_search(user_id, search_id)
+                logger.info(f"Deleted saved search {search_id} for user {user_id[:8]}")
+                print(f"[DEBUG] Deleted saved search: {search_id}")
 
     async def to_message_content(
         self, _input: Attachment

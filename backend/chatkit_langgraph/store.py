@@ -181,17 +181,18 @@ class MemoryStore(Store[dict[str, Any]]):
     # -- User Preferences ------------------------------------------------
     def get_preferences(self, user_id: str) -> Dict[str, Any]:
         """
-        Get user preferences (favorites, hidden properties).
+        Get user preferences (favorites, hidden properties, saved searches).
 
         Args:
             user_id: The user ID from session
 
         Returns:
-            Dictionary with favorites and hidden dicts (property_code -> property_data)
+            Dictionary with favorites, hidden, and saved_searches dicts
         """
         return self._preferences.get(user_id, {
             'favorites': {},
             'hidden': {},
+            'saved_searches': {},
             'version': 2
         })
 
@@ -256,6 +257,53 @@ class MemoryStore(Store[dict[str, Any]]):
         if property_code in prefs['hidden']:
             del prefs['hidden'][property_code]
         self._preferences[user_id] = prefs
+
+    def save_search(self, user_id: str, search_id: str, query: str, metadata: Dict[str, Any] = None) -> None:
+        """
+        Save a search query for quick re-running later.
+
+        Args:
+            user_id: The user ID from session
+            search_id: Unique identifier for this saved search
+            query: The search query text
+            metadata: Optional metadata (filters, etc.)
+        """
+        prefs = self.get_preferences(user_id)
+        if 'saved_searches' not in prefs:
+            prefs['saved_searches'] = {}
+
+        prefs['saved_searches'][search_id] = {
+            'query': query,
+            'timestamp': datetime.now().isoformat(),
+            'metadata': metadata or {}
+        }
+        self._preferences[user_id] = prefs
+
+    def delete_saved_search(self, user_id: str, search_id: str) -> None:
+        """
+        Delete a saved search.
+
+        Args:
+            user_id: The user ID from session
+            search_id: Unique identifier of the saved search to delete
+        """
+        prefs = self.get_preferences(user_id)
+        if 'saved_searches' in prefs and search_id in prefs['saved_searches']:
+            del prefs['saved_searches'][search_id]
+        self._preferences[user_id] = prefs
+
+    def get_saved_searches(self, user_id: str) -> Dict[str, Any]:
+        """
+        Get all saved searches for a user.
+
+        Args:
+            user_id: The user ID from session
+
+        Returns:
+            Dictionary of search_id -> search_data
+        """
+        prefs = self.get_preferences(user_id)
+        return prefs.get('saved_searches', {})
 
     # -- Files -----------------------------------------------------------
     # These methods are not currently used but required to be compatible with the Store interface.

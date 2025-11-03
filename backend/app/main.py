@@ -22,6 +22,7 @@ from starlette.responses import JSONResponse
 from chatkit_langgraph import LangGraphChatKitServer, create_server_from_env
 from custom_components import ComponentRegistry
 from custom_components.property_carousel import PropertyCarouselComponent
+from custom_components.save_search_button import SaveSearchButtonComponent
 
 app = FastAPI(title="LangGraph ChatKit Integration API")
 
@@ -47,7 +48,8 @@ app.add_middleware(
 
 # Initialize component registry with custom components
 component_registry = ComponentRegistry()
-component_registry.register(PropertyCarouselComponent(max_items=20))
+component_registry.register(PropertyCarouselComponent(max_items=50))
+component_registry.register(SaveSearchButtonComponent())
 
 # Initialize the server with custom components
 _langgraph_server: LangGraphChatKitServer | None = create_server_from_env(
@@ -117,10 +119,10 @@ async def get_preferences(
     server: LangGraphChatKitServer = Depends(get_langgraph_server),
 ) -> dict[str, Any]:
     """
-    Get user preferences (favorites and hidden properties).
+    Get user preferences (favorites, hidden properties, and saved searches).
 
     Returns:
-        Dictionary with favorites list, hidden list, and version
+        Dictionary with favorites, hidden, saved_searches, and version
     """
     # Get or create user session ID
     if "user_id" not in request.session:
@@ -275,6 +277,38 @@ async def unhide_property(
 
     # Unhide property
     server.store.unhide_property(user_id, property_code)
+
+    # Return updated preferences
+    preferences = server.store.get_preferences(user_id)
+    return {
+        "success": True,
+        "preferences": preferences,
+    }
+
+
+@app.delete("/langgraph/preferences/saved-searches/{search_id}")
+async def delete_saved_search_endpoint(
+    search_id: str,
+    request: Request,
+    server: LangGraphChatKitServer = Depends(get_langgraph_server),
+) -> dict[str, Any]:
+    """
+    Delete a saved search.
+
+    Args:
+        search_id: Saved search ID to delete
+
+    Returns:
+        Updated preferences
+    """
+    # Get user session ID
+    if "user_id" not in request.session:
+        return {"error": "No session found"}
+
+    user_id = request.session["user_id"]
+
+    # Delete saved search
+    server.store.delete_saved_search(user_id, search_id)
 
     # Return updated preferences
     preferences = server.store.get_preferences(user_id)

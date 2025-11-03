@@ -6,6 +6,8 @@ import {
   getHiddenArray,
   getFavoritesCount,
   getHiddenCount,
+  getSavedSearchesArray,
+  getSavedSearchesCount,
 } from '../contexts/PreferencesContext';
 import { PropertyDetailModal } from './PropertyDetailModal';
 
@@ -32,6 +34,7 @@ export function PreferencesSidebar() {
 
   const favoritesCount = getFavoritesCount(preferences);
   const hiddenCount = getHiddenCount(preferences);
+  const savedSearchesCount = getSavedSearchesCount(preferences);
 
   if (loading) {
     return (
@@ -73,7 +76,7 @@ export function PreferencesSidebar() {
                   My Preferences
                 </h3>
                 <p className="text-sm text-slate-600 dark:text-slate-400">
-                  {favoritesCount} favorites • {hiddenCount} hidden
+                  {favoritesCount} favorites • {hiddenCount} hidden • {savedSearchesCount} saved
                 </p>
               </div>
             </div>
@@ -120,7 +123,7 @@ export function PreferencesSidebar() {
                   My Preferences
                 </h3>
                 <p className="text-sm text-slate-600 dark:text-slate-400">
-                  {favoritesCount} favorites • {hiddenCount} hidden
+                  {favoritesCount} favorites • {hiddenCount} hidden • {savedSearchesCount} saved
                 </p>
               </div>
             </div>
@@ -143,6 +146,36 @@ export function PreferencesSidebar() {
               </svg>
             </button>
           </div>
+
+          {/* Saved Searches Section */}
+          {savedSearchesCount > 0 && (
+            <div className="mb-6">
+              <h4 className="mb-3 flex items-center gap-2 text-sm font-semibold text-blue-600 dark:text-blue-400">
+                <svg
+                  className="h-4 w-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+                  />
+                </svg>
+                Saved Searches
+              </h4>
+              <div className="space-y-2">
+                {getSavedSearchesArray(preferences).map((search) => (
+                  <SavedSearchChip
+                    key={search.id}
+                    search={search}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Favorites Section */}
           {favoritesCount > 0 && (
@@ -208,7 +241,7 @@ export function PreferencesSidebar() {
           )}
 
           {/* Empty State */}
-          {favoritesCount === 0 && hiddenCount === 0 && (
+          {favoritesCount === 0 && hiddenCount === 0 && savedSearchesCount === 0 && (
             <div className="py-8 text-center">
               <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-slate-100 dark:bg-slate-800">
                 <svg
@@ -226,10 +259,10 @@ export function PreferencesSidebar() {
                 </svg>
               </div>
               <p className="text-sm text-slate-600 dark:text-slate-400">
-                No favorites or hidden properties yet
+                No preferences saved yet
               </p>
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-500">
-                Click the star icon on properties to favorite them
+                Favorite properties, save searches, or hide listings to get started
               </p>
             </div>
           )}
@@ -245,6 +278,123 @@ export function PreferencesSidebar() {
         }}
         property={selectedProperty}
       />
+    </div>
+  );
+}
+
+interface SavedSearch {
+  id: string;
+  query: string;
+  timestamp: string;
+  metadata?: Record<string, any>;
+}
+
+function SavedSearchChip({ search }: { search: SavedSearch }) {
+  const { refreshPreferences } = usePreferences();
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleRunSearch = () => {
+    // This will be handled by ChatKitPanel
+    const event = new CustomEvent('run-saved-search', { detail: { query: search.query } });
+    window.dispatchEvent(event);
+  };
+
+  const handleDelete = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setIsDeleting(true);
+
+    try {
+      const response = await fetch(`/langgraph/preferences/saved-searches/${search.id}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+
+      if (response.ok) {
+        // Refresh preferences to update UI
+        await refreshPreferences();
+      } else {
+        console.error('Failed to delete saved search:', await response.text());
+      }
+    } catch (error) {
+      console.error('Error deleting saved search:', error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const formatTimestamp = (timestamp: string) => {
+    try {
+      const date = new Date(timestamp);
+      const now = new Date();
+      const diffMs = now.getTime() - date.getTime();
+      const diffMins = Math.floor(diffMs / 60000);
+      const diffHours = Math.floor(diffMins / 60);
+      const diffDays = Math.floor(diffHours / 24);
+
+      if (diffMins < 1) return 'just now';
+      if (diffMins < 60) return `${diffMins}m ago`;
+      if (diffHours < 24) return `${diffHours}h ago`;
+      if (diffDays < 7) return `${diffDays}d ago`;
+      return date.toLocaleDateString();
+    } catch {
+      return '';
+    }
+  };
+
+  return (
+    <div
+      onClick={handleRunSearch}
+      className={clsx(
+        "group relative flex items-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 transition-all cursor-pointer dark:border-blue-800 dark:bg-blue-900/20",
+        !isDeleting && "hover:bg-blue-100 hover:shadow-sm dark:hover:bg-blue-900/30",
+        isDeleting && "opacity-50 cursor-not-allowed"
+      )}
+    >
+      <svg
+        className="h-4 w-4 flex-shrink-0 text-blue-600 dark:text-blue-400"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth={2}
+          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+        />
+      </svg>
+      <div className="flex-1 min-w-0">
+        <p className="truncate text-sm font-medium text-blue-900 dark:text-blue-100">
+          {search.query}
+        </p>
+        <p className="text-xs text-blue-600 dark:text-blue-400">
+          {formatTimestamp(search.timestamp)}
+        </p>
+      </div>
+      <button
+        onClick={handleDelete}
+        disabled={isDeleting}
+        className={clsx(
+          "rounded-md p-1 transition-all",
+          !isDeleting && "hover:bg-blue-200 dark:hover:bg-blue-800",
+          isDeleting && "cursor-not-allowed"
+        )}
+        title="Delete saved search"
+      >
+        <svg
+          className="h-4 w-4 text-blue-600 hover:text-red-500 dark:text-blue-400"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M6 18L18 6M6 6l12 12"
+          />
+        </svg>
+      </button>
     </div>
   );
 }
