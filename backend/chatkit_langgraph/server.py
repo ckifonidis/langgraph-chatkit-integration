@@ -21,9 +21,12 @@ from chatkit.types import (
     AssistantMessageItem,
     Attachment,
     ClientToolCallItem,
+    Page,
+    Thread,
     ThreadItem,
     ThreadMetadata,
     ThreadStreamEvent,
+    ThreadUpdatedEvent,
     UserMessageItem,
     WidgetItem,
 )
@@ -224,6 +227,35 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
 
         logger.info(f"LangGraph ChatKit Server initialized: {self.langgraph_url}")
 
+    def _to_thread_response(self, thread: ThreadMetadata | Thread) -> Thread:
+        """
+        Convert ThreadMetadata to Thread for ThreadUpdatedEvent emission.
+
+        Follows the official ChatKit SDK pattern. Thread objects are required
+        for ThreadUpdatedEvent, but respond() receives ThreadMetadata.
+
+        This mirrors the implementation in chatkit.server.ChatKitServer._to_thread_response()
+        and ensures proper type conversion for event emission.
+
+        Args:
+            thread: ThreadMetadata from respond() or Thread
+
+        Returns:
+            Thread object with empty items page (items managed separately)
+        """
+        # If already Thread, use its items; otherwise empty Page
+        items = thread.items if isinstance(thread, Thread) else Page()
+
+        # Construct Thread from metadata fields
+        return Thread(
+            id=thread.id,
+            title=thread.title,
+            created_at=thread.created_at,
+            items=items,
+            status=thread.status,
+            metadata=thread.metadata,
+        )
+
     async def respond(
         self,
         thread: ThreadMetadata,
@@ -375,6 +407,24 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                 yield ThreadItemDoneEvent(item=ai_message_item)
                 print(f"[DEBUG] AI response: {len(ai_content)} chars")
 
+                # Add property count message if we have query results
+                if has_query_results:
+                    total_count = final_event.get("results_count", len(query_results))
+                    showing_count = len(query_results)
+
+                    count_msg_id = _gen_id("msg")
+                    count_item = AssistantMessageItem(
+                        id=count_msg_id,
+                        thread_id=thread.id,
+                        created_at=datetime.now(),
+                        content=[AssistantMessageContent(
+                            text=f"Showing {showing_count} of {total_count} properties:"
+                        )],
+                        status="completed",
+                    )
+                    yield ThreadItemDoneEvent(item=count_item)
+                    print(f"[DEBUG] Showing {showing_count} of {total_count} properties")
+
                 # Check component registry for additional widgets to render
                 if self.component_registry and final_event:
                     print(f"[DEBUG] Checking components. Event keys: {list(final_event.keys())}")
@@ -450,6 +500,61 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                     status="completed",
                 )
                 yield ThreadItemDoneEvent(item=error_item)
+
+            # Update thread title
+            logger.info(f"[THREAD-TITLE] Starting title update check")
+            logger.info(f"[THREAD-TITLE] Thread type: {type(thread)}")
+            logger.info(f"[THREAD-TITLE] Thread ID: {thread.id}")
+            logger.info(f"[THREAD-TITLE] Current title: {thread.title}")
+
+            filters_summary = final_event.get("filters_summary")
+            logger.info(f"[THREAD-TITLE] filters_summary from response: {filters_summary}")
+
+            if filters_summary:
+                logger.info(f"[THREAD-TITLE] Found filters_summary: '{filters_summary}'")
+                logger.info(f"[THREAD-TITLE] Setting new title: '{filters_summary[:60].strip()}')")
+                # Use filters_summary from LangGraph
+                thread.title = filters_summary[:60].strip()
+
+                # Save updated thread
+                await self.store.save_thread(thread, context)
+
+                # Notify frontend of title change
+                logger.info(f"[THREAD-TITLE] About to yield ThreadUpdatedEvent (filters_summary path)")
+                logger.info(f"[THREAD-TITLE] Thread for event - type: {type(thread).__name__}, id: {thread.id}, title: {thread.title}")
+                try:
+                    # Use ChatKit SDK official pattern for ThreadMetadata → Thread conversion
+                    yield ThreadUpdatedEvent(thread=self._to_thread_response(thread))
+                    logger.info(f"[THREAD-TITLE] Successfully yielded ThreadUpdatedEvent")
+                except Exception as e:
+                    logger.error(f"[THREAD-TITLE] ERROR yielding ThreadUpdatedEvent: {e}", exc_info=True)
+                    logger.error(f"[THREAD-TITLE] Thread dump: {thread.model_dump()}")
+                    raise
+
+            elif thread.title is None and user_message:
+                logger.info(f"[THREAD-TITLE] Using fallback title from user message")
+                logger.info(f"[THREAD-TITLE] User message (first 50 chars): '{user_message[:50]}'")
+                # Fallback: Use first message if title is not set yet
+                thread.title = user_message[:50].strip()
+                if len(user_message) > 50:
+                    thread.title += "..."
+
+                logger.info(f"[THREAD-TITLE] Fallback title set to: '{thread.title}'")
+
+                # Save updated thread
+                await self.store.save_thread(thread, context)
+
+                # Notify frontend of title change
+                logger.info(f"[THREAD-TITLE] About to yield ThreadUpdatedEvent (fallback path)")
+                logger.info(f"[THREAD-TITLE] Thread for event - type: {type(thread).__name__}, id: {thread.id}, title: {thread.title}")
+                try:
+                    # Use ChatKit SDK official pattern for ThreadMetadata → Thread conversion
+                    yield ThreadUpdatedEvent(thread=self._to_thread_response(thread))
+                    logger.info(f"[THREAD-TITLE] Successfully yielded ThreadUpdatedEvent (fallback)")
+                except Exception as e:
+                    logger.error(f"[THREAD-TITLE] ERROR yielding ThreadUpdatedEvent (fallback): {e}", exc_info=True)
+                    logger.error(f"[THREAD-TITLE] Thread dump: {thread.model_dump()}")
+                    raise
 
         except Exception as e:
             logger.error(
