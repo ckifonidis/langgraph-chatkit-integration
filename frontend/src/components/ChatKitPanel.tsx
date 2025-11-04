@@ -28,6 +28,7 @@ export function ChatKitPanel({
   // Throttle + debounce refs for thread reload
   const lastReloadRef = useRef<number>(0);
   const pendingReloadRef = useRef<NodeJS.Timeout | null>(null);
+  const isReloadingRef = useRef<boolean>(false);  // Prevent parallel reloads
   const RELOAD_THROTTLE_MS = 2000;  // ChatKit requires 2s minimum between calls
   const RELOAD_DEBOUNCE_MS = 300;   // Group rapid actions together
 
@@ -113,42 +114,55 @@ export function ChatKitPanel({
     },
   });
 
-  // Handler to reload current thread items (with throttling + debouncing)
-  const handleThreadReload = async () => {
+  // Execute the actual reload with throttle enforcement and in-flight tracking
+  const executeReload = async () => {
+    // Prevent parallel reloads
+    if (isReloadingRef.current) {
+      console.log('[THREAD-RELOAD] Already reloading, skipping duplicate call');
+      return;
+    }
+
     const now = Date.now();
     const timeSinceLastReload = now - lastReloadRef.current;
 
-    // Clear any pending debounced call
-    if (pendingReloadRef.current) {
-      clearTimeout(pendingReloadRef.current);
-    }
-
-    // If within 2s throttle window, schedule for later
+    // Enforce 2s minimum between calls
     if (timeSinceLastReload < RELOAD_THROTTLE_MS) {
-      const delay = RELOAD_THROTTLE_MS - timeSinceLastReload + RELOAD_DEBOUNCE_MS;
-      console.log(`[THREAD-RELOAD] Throttled, queuing reload for ${delay}ms from now`);
-
-      pendingReloadRef.current = setTimeout(() => {
-        handleThreadReload(); // Execute after delay
-      }, delay);
-      return;
+      const waitTime = RELOAD_THROTTLE_MS - timeSinceLastReload;
+      console.log(`[THREAD-RELOAD] Throttle enforced, waiting ${waitTime}ms`);
+      await new Promise(resolve => setTimeout(resolve, waitTime));
     }
 
-    // Execute reload now
-    lastReloadRef.current = now;
+    isReloadingRef.current = true;
+    lastReloadRef.current = Date.now();
     console.log('[THREAD-RELOAD] Executing reload');
 
-    if (!chatkit.fetchUpdates) {
-      console.error('[THREAD-RELOAD] chatkit.fetchUpdates is not available!');
-      return;
-    }
-
     try {
+      if (!chatkit.fetchUpdates) {
+        console.error('[THREAD-RELOAD] chatkit.fetchUpdates not available');
+        return;
+      }
       await chatkit.fetchUpdates();
       console.log('[THREAD-RELOAD] ✅ Thread items refreshed');
     } catch (error) {
       console.error('[THREAD-RELOAD] Error refreshing thread items:', error);
+    } finally {
+      isReloadingRef.current = false;
     }
+  };
+
+  // Debounce entry point - called by modal onClose handlers
+  const handleThreadReload = async () => {
+    // Clear existing pending reload
+    if (pendingReloadRef.current) {
+      clearTimeout(pendingReloadRef.current);
+    }
+
+    // Debounce: wait for user to stop acting
+    pendingReloadRef.current = setTimeout(() => {
+      executeReload();
+    }, RELOAD_DEBOUNCE_MS);
+
+    console.log(`[THREAD-RELOAD] Reload scheduled in ${RELOAD_DEBOUNCE_MS}ms`);
   };
 
   // Register thread reload function with preferences context
