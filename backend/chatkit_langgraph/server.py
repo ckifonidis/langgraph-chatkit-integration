@@ -360,6 +360,7 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                     continue
 
                 # Buffer the full event for component processing
+                # Always process ALL events - the last one has the most complete data
                 final_event = event
                 print(f"[DEBUG] Event #{event_count} keys: {list(event.keys())[:5]}")
 
@@ -369,10 +370,7 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                     final_ai_message = ai_msg
                     print(f"[DEBUG] Found AI message in event #{event_count}")
 
-                # Check if this is the final response
-                if self.langgraph_client.is_final_response(event):
-                    print(f"[DEBUG] Final response detected at event #{event_count}")
-                    break
+                # Don't break early - process all events until stream ends naturally
 
             print(f"[DEBUG] Processed {event_count} events total")
 
@@ -407,24 +405,6 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                 yield ThreadItemDoneEvent(item=ai_message_item)
                 print(f"[DEBUG] AI response: {len(ai_content)} chars")
 
-                # Add property count message if we have query results
-                if has_query_results:
-                    total_count = final_event.get("results_count", len(query_results))
-                    showing_count = len(query_results)
-
-                    count_msg_id = _gen_id("msg")
-                    count_item = AssistantMessageItem(
-                        id=count_msg_id,
-                        thread_id=thread.id,
-                        created_at=datetime.now(),
-                        content=[AssistantMessageContent(
-                            text=f"Showing {showing_count} of {total_count} properties:"
-                        )],
-                        status="completed",
-                    )
-                    yield ThreadItemDoneEvent(item=count_item)
-                    print(f"[DEBUG] Showing {showing_count} of {total_count} properties")
-
                 # Check component registry for additional widgets to render
                 if self.component_registry and final_event:
                     print(f"[DEBUG] Checking components. Event keys: {list(final_event.keys())}")
@@ -434,8 +414,19 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                     widgets = self.component_registry.get_widgets(response_data_with_query, user_preferences=user_preferences)
                     print(f"[DEBUG] Component registry returned {len(widgets)} widgets")
 
-                    # Yield each widget that matched rules
+                    # Separate widgets: Card widgets (FiltersCard) vs ListView widgets (PropertyCarousel)
+                    from chatkit.widgets import Card, ListView
+                    card_widgets = []
+                    other_widgets = []
+
                     for widget in widgets:
+                        if isinstance(widget, Card):
+                            card_widgets.append(widget)
+                        else:
+                            other_widgets.append(widget)
+
+                    # Yield Card widgets first (FiltersCard)
+                    for widget in card_widgets:
                         widget_id = _gen_id("widget")
                         widget_item = WidgetItem(
                             id=widget_id,
@@ -445,13 +436,79 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                             status="completed",
                         )
                         yield ThreadItemDoneEvent(item=widget_item)
-                        print(f"[DEBUG] Yielded widget from component")
+                        print(f"[DEBUG] Yielded Card widget")
+
+                # Add property count message AFTER Card widgets, BEFORE ListView (if we have query results)
+                if has_query_results:
+                    total_count = final_event.get("results_count", len(query_results))
+                    showing_count = len(query_results)
+
+                    count_text = f"Showing {showing_count} of {total_count} properties"
+
+                    count_msg_id = _gen_id("msg")
+                    count_item = AssistantMessageItem(
+                        id=count_msg_id,
+                        thread_id=thread.id,
+                        created_at=datetime.now(),
+                        content=[AssistantMessageContent(text=count_text)],
+                        status="completed",
+                    )
+                    yield ThreadItemDoneEvent(item=count_item)
+                    print(f"[DEBUG] Showing {showing_count} of {total_count} properties")
+
+                # Yield remaining widgets (PropertyCarousel ListView)
+                if self.component_registry and final_event:
+                    for widget in other_widgets:
+                        widget_id = _gen_id("widget")
+                        widget_item = WidgetItem(
+                            id=widget_id,
+                            thread_id=thread.id,
+                            created_at=datetime.now(),
+                            widget=widget,
+                            status="completed",
+                        )
+                        yield ThreadItemDoneEvent(item=widget_item)
+                        print(f"[DEBUG] Yielded ListView/other widget")
 
             elif has_query_results:
-                # No AI message but we have query results - generate intro message
+                # No AI message but we have query results
+                # Check component registry for widgets
+                if self.component_registry and final_event:
+                    print(f"[DEBUG] Checking components for query results")
+                    # Add user query to response_data for components
+                    response_data_with_query = {**final_event, "_user_query": user_message}
+                    widgets = self.component_registry.get_widgets(response_data_with_query, user_preferences=user_preferences)
+                    print(f"[DEBUG] Component registry returned {len(widgets)} widgets")
+
+                    # Separate widgets: Card widgets (FiltersCard) vs ListView widgets (PropertyCarousel)
+                    from chatkit.widgets import Card, ListView
+                    card_widgets = []
+                    other_widgets = []
+
+                    for widget in widgets:
+                        if isinstance(widget, Card):
+                            card_widgets.append(widget)
+                        else:
+                            other_widgets.append(widget)
+
+                    # Yield Card widgets first (FiltersCard)
+                    for widget in card_widgets:
+                        widget_id = _gen_id("widget")
+                        widget_item = WidgetItem(
+                            id=widget_id,
+                            thread_id=thread.id,
+                            created_at=datetime.now(),
+                            widget=widget,
+                            status="completed",
+                        )
+                        yield ThreadItemDoneEvent(item=widget_item)
+                        print(f"[DEBUG] Yielded Card widget")
+
+                # Add property count message AFTER Card widgets, BEFORE ListView
                 total_count = final_event.get("results_count", len(final_event.get("query_results", [])))
                 showing_count = len(final_event.get("query_results", []))
-                intro_text = f"Showing {showing_count} of {total_count} properties:"
+
+                intro_text = f"Showing {showing_count} of {total_count} properties"
 
                 intro_msg_id = _gen_id("msg")
                 intro_item = AssistantMessageItem(
@@ -464,15 +521,9 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                 yield ThreadItemDoneEvent(item=intro_item)
                 print(f"[DEBUG] Query results without AI message, showing {showing_count} of {total_count} results")
 
-                # Check component registry for carousel widget
+                # Yield remaining widgets (PropertyCarousel ListView)
                 if self.component_registry and final_event:
-                    print(f"[DEBUG] Checking components for query results")
-                    # Add user query to response_data for components
-                    response_data_with_query = {**final_event, "_user_query": user_message}
-                    widgets = self.component_registry.get_widgets(response_data_with_query, user_preferences=user_preferences)
-                    print(f"[DEBUG] Component registry returned {len(widgets)} widgets")
-
-                    for widget in widgets:
+                    for widget in other_widgets:
                         widget_id = _gen_id("widget")
                         widget_item = WidgetItem(
                             id=widget_id,
@@ -482,7 +533,7 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                             status="completed",
                         )
                         yield ThreadItemDoneEvent(item=widget_item)
-                        print(f"[DEBUG] Yielded carousel widget")
+                        print(f"[DEBUG] Yielded ListView/other widget")
 
             else:
                 logger.warning("No AI message or query results found")
@@ -502,17 +553,17 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                 yield ThreadItemDoneEvent(item=error_item)
 
             # Update thread title
-            logger.info(f"[THREAD-TITLE] Starting title update check")
-            logger.info(f"[THREAD-TITLE] Thread type: {type(thread)}")
-            logger.info(f"[THREAD-TITLE] Thread ID: {thread.id}")
-            logger.info(f"[THREAD-TITLE] Current title: {thread.title}")
+            print(f"[THREAD-TITLE] Starting title update check")
+            print(f"[THREAD-TITLE] Thread type: {type(thread)}")
+            print(f"[THREAD-TITLE] Thread ID: {thread.id}")
+            print(f"[THREAD-TITLE] Current title: {thread.title}")
 
             filters_summary = final_event.get("filters_summary")
-            logger.info(f"[THREAD-TITLE] filters_summary from response: {filters_summary}")
+            print(f"[THREAD-TITLE] filters_summary from response: {filters_summary}")
 
             if filters_summary:
-                logger.info(f"[THREAD-TITLE] Found filters_summary: '{filters_summary}'")
-                logger.info(f"[THREAD-TITLE] Setting new title: '{filters_summary[:60].strip()}')")
+                print(f"[THREAD-TITLE] Found filters_summary: '{filters_summary}'")
+                print(f"[THREAD-TITLE] Setting new title: '{filters_summary[:60].strip()}')")
                 # Use filters_summary from LangGraph
                 thread.title = filters_summary[:60].strip()
 
@@ -520,40 +571,42 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                 await self.store.save_thread(thread, context)
 
                 # Notify frontend of title change
-                logger.info(f"[THREAD-TITLE] About to yield ThreadUpdatedEvent (filters_summary path)")
-                logger.info(f"[THREAD-TITLE] Thread for event - type: {type(thread).__name__}, id: {thread.id}, title: {thread.title}")
+                print(f"[THREAD-TITLE] About to yield ThreadUpdatedEvent (filters_summary path)")
+                print(f"[THREAD-TITLE] Thread for event - type: {type(thread).__name__}, id: {thread.id}, title: {thread.title}")
                 try:
                     # Use ChatKit SDK official pattern for ThreadMetadata → Thread conversion
                     yield ThreadUpdatedEvent(thread=self._to_thread_response(thread))
-                    logger.info(f"[THREAD-TITLE] Successfully yielded ThreadUpdatedEvent")
+                    print(f"[THREAD-TITLE] Successfully yielded ThreadUpdatedEvent")
                 except Exception as e:
-                    logger.error(f"[THREAD-TITLE] ERROR yielding ThreadUpdatedEvent: {e}", exc_info=True)
-                    logger.error(f"[THREAD-TITLE] Thread dump: {thread.model_dump()}")
+                    print(f"[THREAD-TITLE] ERROR yielding ThreadUpdatedEvent: {e}")
+                    logger.error(f"[THREAD-TITLE] Full error:", exc_info=True)
+                    print(f"[THREAD-TITLE] Thread dump: {thread.model_dump()}")
                     raise
 
             elif thread.title is None and user_message:
-                logger.info(f"[THREAD-TITLE] Using fallback title from user message")
-                logger.info(f"[THREAD-TITLE] User message (first 50 chars): '{user_message[:50]}'")
+                print(f"[THREAD-TITLE] Using fallback title from user message")
+                print(f"[THREAD-TITLE] User message (first 50 chars): '{user_message[:50]}'")
                 # Fallback: Use first message if title is not set yet
                 thread.title = user_message[:50].strip()
                 if len(user_message) > 50:
                     thread.title += "..."
 
-                logger.info(f"[THREAD-TITLE] Fallback title set to: '{thread.title}'")
+                print(f"[THREAD-TITLE] Fallback title set to: '{thread.title}'")
 
                 # Save updated thread
                 await self.store.save_thread(thread, context)
 
                 # Notify frontend of title change
-                logger.info(f"[THREAD-TITLE] About to yield ThreadUpdatedEvent (fallback path)")
-                logger.info(f"[THREAD-TITLE] Thread for event - type: {type(thread).__name__}, id: {thread.id}, title: {thread.title}")
+                print(f"[THREAD-TITLE] About to yield ThreadUpdatedEvent (fallback path)")
+                print(f"[THREAD-TITLE] Thread for event - type: {type(thread).__name__}, id: {thread.id}, title: {thread.title}")
                 try:
                     # Use ChatKit SDK official pattern for ThreadMetadata → Thread conversion
                     yield ThreadUpdatedEvent(thread=self._to_thread_response(thread))
-                    logger.info(f"[THREAD-TITLE] Successfully yielded ThreadUpdatedEvent (fallback)")
+                    print(f"[THREAD-TITLE] Successfully yielded ThreadUpdatedEvent (fallback)")
                 except Exception as e:
-                    logger.error(f"[THREAD-TITLE] ERROR yielding ThreadUpdatedEvent (fallback): {e}", exc_info=True)
-                    logger.error(f"[THREAD-TITLE] Thread dump: {thread.model_dump()}")
+                    print(f"[THREAD-TITLE] ERROR yielding ThreadUpdatedEvent (fallback): {e}")
+                    logger.error(f"[THREAD-TITLE] Full error:", exc_info=True)
+                    print(f"[THREAD-TITLE] Thread dump: {thread.model_dump()}")
                     raise
 
         except Exception as e:

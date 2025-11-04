@@ -95,10 +95,15 @@ class ComponentRegistry:
 
                     if widget is not None:
                         widgets.append(widget)
+                        print(
+                            f"[COMPONENT] {component.__class__.__name__} (priority {component.get_priority()}) rendered widget"
+                        )
+                        print(f"[COMPONENT] Widget type: {type(widget).__name__}")
                         logger.info(
                             f"Component {component.__class__.__name__} rendered widget"
                         )
                     else:
+                        print(f"[COMPONENT] {component.__class__.__name__} returned None")
                         logger.warning(
                             f"Component {component.__class__.__name__} returned None"
                         )

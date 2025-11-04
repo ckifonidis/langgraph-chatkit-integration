@@ -125,9 +125,15 @@ class LangGraphStreamClient:
         if if_not_exists:
             payload["if_not_exists"] = if_not_exists
 
-        print(f"[DEBUG] LangGraph request: {url}")
+        print(f"[LANGGRAPH-REQUEST] ==================== NEW REQUEST ====================")
+        print(f"[LANGGRAPH-REQUEST] URL: {url}")
+        print(f"[LANGGRAPH-REQUEST] Thread ID: {thread_id}")
+        print(f"[LANGGRAPH-REQUEST] User message: '{user_message}'")
+        print(f"[LANGGRAPH-REQUEST] Full payload: {json.dumps(payload, indent=2)}")
+        print(f"[LANGGRAPH-REQUEST] =====================================================")
 
         try:
+            event_count = 0
             async with httpx.AsyncClient(timeout=self.timeout) as client:
                 async with client.stream(
                     "POST",
@@ -160,6 +166,15 @@ class LangGraphStreamClient:
 
                             try:
                                 event_data = json.loads(data_str)
+                                event_count += 1
+
+                                # Log event (omit query_results to avoid huge logs)
+                                event_for_logging = {k: v for k, v in event_data.items() if k != 'query_results'}
+                                if 'query_results' in event_data:
+                                    event_for_logging['query_results'] = f"[{len(event_data['query_results'])} items omitted]"
+
+                                print(f"[LANGGRAPH-RESPONSE] Event #{event_count}: {json.dumps(event_for_logging, indent=2, default=str)}")
+
                                 yield event_data
 
                             except json.JSONDecodeError as e:
@@ -173,6 +188,10 @@ class LangGraphStreamClient:
                         elif line.startswith("event: "):
                             event_type = line[7:]
                             logger.debug(f"Stream event type: {event_type}")
+
+            print(f"[LANGGRAPH-RESPONSE] ==================== STREAM COMPLETE ====================")
+            print(f"[LANGGRAPH-RESPONSE] Total events received: {event_count}")
+            print(f"[LANGGRAPH-RESPONSE] ===========================================================")
 
         except httpx.RequestError as e:
             logger.error(f"LangGraph request error: {e}")

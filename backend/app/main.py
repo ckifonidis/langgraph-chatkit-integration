@@ -24,6 +24,7 @@ from starlette.responses import JSONResponse
 from chatkit_langgraph import LangGraphChatKitServer, create_server_from_env
 from chatkit_langgraph.description_client import DescriptionLangGraphClient
 from custom_components import ComponentRegistry
+from custom_components.filters_card import FiltersCardComponent
 from custom_components.property_carousel import PropertyCarouselComponent
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,7 @@ app.add_middleware(
 
 # Initialize component registry with custom components
 component_registry = ComponentRegistry()
+component_registry.register(FiltersCardComponent())
 component_registry.register(PropertyCarouselComponent(max_items=50))
 
 # Initialize the server with custom components
