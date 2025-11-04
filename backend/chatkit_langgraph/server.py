@@ -364,11 +364,11 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                 final_event = event
                 print(f"[DEBUG] Event #{event_count} keys: {list(event.keys())[:5]}")
 
-                # Extract latest AI message
-                ai_msg = self.langgraph_client.extract_latest_ai_message(event)
+                # Extract AI message only if it appears after the latest human message
+                ai_msg = self.langgraph_client.extract_ai_message_after_last_human(event)
                 if ai_msg:
                     final_ai_message = ai_msg
-                    print(f"[DEBUG] Found AI message in event #{event_count}")
+                    print(f"[DEBUG] Found NEW AI message (after latest human) in event #{event_count}")
 
                 # Don't break early - process all events until stream ends naturally
 

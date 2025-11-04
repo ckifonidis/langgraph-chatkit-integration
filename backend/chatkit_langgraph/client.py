@@ -221,6 +221,42 @@ class LangGraphStreamClient:
 
         return None
 
+    def extract_ai_message_after_last_human(
+        self, state_event: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """
+        Extract AI message only if it appears after the latest human message.
+
+        This ensures we only show AI messages generated in the current response,
+        not old messages from previous conversation rounds.
+
+        Args:
+            state_event: LangGraph state event dictionary
+
+        Returns:
+            AI message dict if one exists after last human message, None otherwise
+        """
+        messages = state_event.get("messages", [])
+
+        # Find index of last human message
+        last_human_idx = -1
+        for i in range(len(messages) - 1, -1, -1):
+            if messages[i].get("type") == "human":
+                last_human_idx = i
+                break
+
+        # No human message found
+        if last_human_idx == -1:
+            return None
+
+        # Check if there's an AI message after the last human message
+        for i in range(last_human_idx + 1, len(messages)):
+            if messages[i].get("type") == "ai":
+                return messages[i]
+
+        # No AI message after last human message
+        return None
+
     def extract_full_conversation(
         self, state_event: dict[str, Any]
     ) -> list[dict[str, Any]]:
