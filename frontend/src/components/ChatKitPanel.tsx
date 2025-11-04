@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ChatKit, useChatKit } from "../chatkit-react";
 import {
   CHATKIT_API_URL,
@@ -24,6 +24,12 @@ export function ChatKitPanel({
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const { refreshPreferences, setCurrentThreadId: setPreferencesThreadId, registerThreadReload } = usePreferences();
+
+  // Throttle + debounce refs for thread reload
+  const lastReloadRef = useRef<number>(0);
+  const pendingReloadRef = useRef<NodeJS.Timeout | null>(null);
+  const RELOAD_THROTTLE_MS = 2000;  // ChatKit requires 2s minimum between calls
+  const RELOAD_DEBOUNCE_MS = 300;   // Group rapid actions together
 
   const chatkit = useChatKit({
     api: { url: CHATKIT_API_URL, domainKey: CHATKIT_API_DOMAIN_KEY },
@@ -107,9 +113,30 @@ export function ChatKitPanel({
     },
   });
 
-  // Handler to reload current thread items
+  // Handler to reload current thread items (with throttling + debouncing)
   const handleThreadReload = async () => {
-    console.log('[THREAD-RELOAD] handleThreadReload called');
+    const now = Date.now();
+    const timeSinceLastReload = now - lastReloadRef.current;
+
+    // Clear any pending debounced call
+    if (pendingReloadRef.current) {
+      clearTimeout(pendingReloadRef.current);
+    }
+
+    // If within 2s throttle window, schedule for later
+    if (timeSinceLastReload < RELOAD_THROTTLE_MS) {
+      const delay = RELOAD_THROTTLE_MS - timeSinceLastReload + RELOAD_DEBOUNCE_MS;
+      console.log(`[THREAD-RELOAD] Throttled, queuing reload for ${delay}ms from now`);
+
+      pendingReloadRef.current = setTimeout(() => {
+        handleThreadReload(); // Execute after delay
+      }, delay);
+      return;
+    }
+
+    // Execute reload now
+    lastReloadRef.current = now;
+    console.log('[THREAD-RELOAD] Executing reload');
 
     if (!chatkit.fetchUpdates) {
       console.error('[THREAD-RELOAD] chatkit.fetchUpdates is not available!');
@@ -129,6 +156,15 @@ export function ChatKitPanel({
     registerThreadReload(handleThreadReload);
   }, [registerThreadReload, handleThreadReload]);
 
+  // Cleanup pending reload timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (pendingReloadRef.current) {
+        clearTimeout(pendingReloadRef.current);
+      }
+    };
+  }, []);
+
   return (
     <>
       <div className="relative h-full w-full overflow-hidden border border-slate-200/60 bg-white shadow-card dark:border-slate-800/70 dark:bg-slate-900">
@@ -141,6 +177,7 @@ export function ChatKitPanel({
           setIsModalOpen(false);
           setSelectedProperty(null);
           // Reload thread items after modal closes to reflect any preference changes
+          // Modal actions use skipThreadReload=true, so refresh happens only once here
           await handleThreadReload();
         }}
         property={selectedProperty}

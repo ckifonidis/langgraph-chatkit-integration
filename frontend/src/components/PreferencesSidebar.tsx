@@ -7,6 +7,7 @@ import {
   getFavoritesCount,
   getHiddenCount,
 } from '../contexts/PreferencesContext';
+import { usePropertyActions } from '../hooks/usePropertyActions';
 import { PropertyDetailModal } from './PropertyDetailModal';
 
 interface PropertyData {
@@ -258,8 +259,13 @@ function PropertyCard({
   isHidden?: boolean;
   onCardClick: () => void;
 }) {
-  const { updatePreferences, currentThreadId } = usePreferences();
-  const [isRemoving, setIsRemoving] = useState(false);
+  // Use the centralized property actions hook
+  // Sidebar actions trigger immediate reload (skipThreadReload: false is default)
+  const { toggleFavorite, toggleHide, isUpdating } = usePropertyActions(
+    property.code,
+    property,
+    { skipThreadReload: false } // Sidebar actions need immediate reload
+  );
 
   const formatPrice = (price: number) => {
     return price ? `€${price.toLocaleString()}` : 'Price on request';
@@ -276,34 +282,11 @@ function PropertyCard({
   const handleRemove = async (e: React.MouseEvent) => {
     e.stopPropagation();
 
-    if (!currentThreadId) {
-      console.error('No thread ID available');
-      return;
-    }
-
-    setIsRemoving(true);
-
-    try {
-      const success = await updatePreferences(() => {
-        const endpoint = isHidden
-          ? `/langgraph/preferences/hidden/${property.code}?thread_id=${encodeURIComponent(currentThreadId)}`
-          : `/langgraph/preferences/favorites/${property.code}?thread_id=${encodeURIComponent(currentThreadId)}`;
-
-        return fetch(endpoint, {
-          method: 'DELETE',
-          credentials: 'include',
-        });
-      });
-
-      if (success) {
-        console.log('[REMOVE] ✅ Successfully removed property');
-      } else {
-        console.error('[REMOVE] ❌ Failed to remove property');
-      }
-    } catch (error) {
-      console.error('Error removing property:', error);
-    } finally {
-      setIsRemoving(false);
+    // Call the appropriate toggle function based on context
+    if (isHidden) {
+      await toggleHide(); // Unhide
+    } else {
+      await toggleFavorite(); // Remove from favorites
     }
   };
 
@@ -353,11 +336,11 @@ function PropertyCard({
       <div className="absolute bottom-2 right-2">
         <button
           onClick={handleRemove}
-          disabled={isRemoving}
+          disabled={isUpdating}
           className={clsx(
             "rounded-lg p-1.5 transition-all",
-            isRemoving && "opacity-50 cursor-not-allowed",
-            !isRemoving && "hover:bg-slate-100 dark:hover:bg-slate-700 hover:scale-110"
+            isUpdating && "opacity-50 cursor-not-allowed",
+            !isUpdating && "hover:bg-slate-100 dark:hover:bg-slate-700 hover:scale-110"
           )}
           title={isHidden ? "Unhide property" : "Remove from favorites"}
         >

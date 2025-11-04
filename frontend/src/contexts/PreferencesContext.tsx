@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback, ReactNode } from 'react';
 
 // Type definitions
 interface PropertyData {
@@ -22,6 +22,11 @@ interface Preferences {
   version: number;
 }
 
+interface UpdatePreferencesOptions {
+  /** Skip thread reload after updating preferences (used in modal context) */
+  skipThreadReload?: boolean;
+}
+
 interface PreferencesContextType {
   preferences: Preferences;
   loading: boolean;
@@ -30,7 +35,10 @@ interface PreferencesContextType {
   setCurrentThreadId: (threadId: string | null) => void;
   refreshPreferences: (threadId?: string) => Promise<void>;
   registerThreadReload: (callback: () => Promise<void>) => void;
-  updatePreferences: (apiCall: () => Promise<Response>) => Promise<boolean>;
+  updatePreferences: (
+    apiCall: () => Promise<Response>,
+    options?: UpdatePreferencesOptions
+  ) => Promise<boolean>;
 }
 
 const PreferencesContext = createContext<PreferencesContextType | undefined>(undefined);
@@ -48,7 +56,9 @@ export function PreferencesProvider({ children }: PreferencesProviderProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
-  const [threadReloadCallback, setThreadReloadCallback] = useState<(() => Promise<void>) | null>(null);
+
+  // Use ref instead of state for thread reload callback (simpler pattern)
+  const threadReloadRef = useRef<(() => Promise<void>) | null>(null);
 
   const refreshPreferences = async (threadId?: string) => {
     // Use provided threadId or current one
@@ -85,13 +95,18 @@ export function PreferencesProvider({ children }: PreferencesProviderProps) {
   };
 
   // Register callback for thread reload (called by ChatKitPanel)
-  const registerThreadReload = (callback: () => Promise<void>) => {
-    setThreadReloadCallback(() => callback);
-  };
+  const registerThreadReload = useCallback((callback: () => Promise<void>) => {
+    threadReloadRef.current = callback;
+  }, []);
 
   // Centralized preference update handler
-  // Executes API call, refreshes preferences, triggers thread reload
-  const updatePreferences = async (apiCall: () => Promise<Response>): Promise<boolean> => {
+  // Executes API call, refreshes preferences, optionally triggers thread reload
+  const updatePreferences = async (
+    apiCall: () => Promise<Response>,
+    options: UpdatePreferencesOptions = {}
+  ): Promise<boolean> => {
+    const { skipThreadReload = false } = options;
+
     try {
       const response = await apiCall();
 
@@ -99,12 +114,9 @@ export function PreferencesProvider({ children }: PreferencesProviderProps) {
         // Wait for preferences to refresh
         await refreshPreferences();
 
-        // Small delay to ensure state propagation
-        await new Promise(resolve => setTimeout(resolve, 100));
-
-        // Trigger thread reload if callback registered
-        if (threadReloadCallback) {
-          await threadReloadCallback();
+        // Trigger thread reload if callback registered and not skipped
+        if (!skipThreadReload && threadReloadRef.current) {
+          await threadReloadRef.current();
         }
 
         return true;

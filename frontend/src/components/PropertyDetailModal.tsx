@@ -2,7 +2,7 @@ import { Fragment, useEffect, useState, useRef } from "react";
 import { Dialog, Transition } from "@headlessui/react";
 import { XMarkIcon, CheckIcon, XCircleIcon, StarIcon } from "@heroicons/react/24/outline";
 import { StarIcon as StarIconSolid } from "@heroicons/react/24/solid";
-import { usePreferences } from "../contexts/PreferencesContext";
+import { usePropertyActions } from "../hooks/usePropertyActions";
 import { Tooltip } from "./Tooltip";
 
 // Google Maps type declarations
@@ -172,10 +172,15 @@ export function PropertyDetailModal({
   property,
 }: PropertyDetailModalProps) {
   const [mapsLoaded, setMapsLoaded] = useState(false);
-  const { preferences, updatePreferences, currentThreadId } = usePreferences();
-  const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
-  const [isHiding, setIsHiding] = useState(false);
   const mapInstanceRef = useRef<any>(null);
+
+  // Use the centralized property actions hook
+  // Skip thread reload for modal actions (refresh happens on modal close instead)
+  const { isFavorited, isHidden, isUpdating, toggleFavorite, toggleHide } = usePropertyActions(
+    property?.code,
+    property,
+    { skipThreadReload: true }
+  );
 
   // Description generation state
   const [isLoadingDescription, setIsLoadingDescription] = useState(false);
@@ -185,92 +190,13 @@ export function PropertyDetailModal({
   // Get API key
   const mapsApiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
 
-  // Check if property is favorited
-  const isFavorited = property?.code ? property.code in preferences.favorites : false;
-  const isHidden = property?.code ? property.code in preferences.hidden : false;
-
-  // Handle favorite toggle
+  // Handlers now use the centralized hook functions
   const handleToggleFavorite = async () => {
-    if (!property?.code || !currentThreadId) return;
-
-    console.log('[FAVORITE] Toggle clicked, isFavorited:', isFavorited, 'property:', property.code);
-
-    setIsTogglingFavorite(true);
-    try {
-      const success = await updatePreferences(() => {
-        if (isFavorited) {
-          // Remove from favorites
-          console.log('[FAVORITE] Removing from favorites...');
-          return fetch(`/langgraph/preferences/favorites/${property.code}?thread_id=${encodeURIComponent(currentThreadId)}`, {
-            method: 'DELETE',
-            credentials: 'include',
-          });
-        } else {
-          // Add to favorites
-          console.log('[FAVORITE] Adding to favorites...');
-          return fetch('/langgraph/preferences/favorites', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              thread_id: currentThreadId,
-              propertyCode: property.code,
-              propertyData: property,
-            }),
-          });
-        }
-      });
-
-      if (success) {
-        console.log('[FAVORITE] ✅ Successfully updated favorites');
-      } else {
-        console.error('[FAVORITE] ❌ Failed to update favorites');
-      }
-    } catch (error) {
-      console.error('Error toggling favorite:', error);
-    } finally {
-      setIsTogglingFavorite(false);
-    }
+    await toggleFavorite();
   };
 
-  // Handle hide/unhide toggle
   const handleToggleHide = async () => {
-    if (!property?.code || !currentThreadId) return;
-
-    setIsHiding(true);
-    try {
-      const success = await updatePreferences(() => {
-        if (isHidden) {
-          // Unhide property
-          return fetch(`/langgraph/preferences/hidden/${property.code}?thread_id=${encodeURIComponent(currentThreadId)}`, {
-            method: 'DELETE',
-            credentials: 'include',
-          });
-        } else {
-          // Hide property
-          return fetch('/langgraph/preferences/hidden', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            credentials: 'include',
-            body: JSON.stringify({
-              thread_id: currentThreadId,
-              propertyCode: property.code,
-              propertyData: property,
-            }),
-          });
-        }
-      });
-
-      if (success) {
-        console.log('[HIDE] ✅ Successfully updated hidden properties');
-      } else {
-        console.error('[HIDE] ❌ Failed to update hidden properties');
-      }
-    } catch (error) {
-      console.error('Error toggling hide:', error);
-    } finally {
-      setIsHiding(false);
-    }
+    await toggleHide();
   };
 
   // Dynamically load Google Maps API
@@ -422,7 +348,7 @@ export function PropertyDetailModal({
                         <button
                           type="button"
                           onClick={handleToggleFavorite}
-                          disabled={isTogglingFavorite}
+                          disabled={isUpdating}
                           className="flex-shrink-0 rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-yellow-500 dark:hover:bg-slate-800 dark:hover:text-yellow-400 transition-colors disabled:opacity-50"
                         >
                           {isFavorited ? (
@@ -438,7 +364,7 @@ export function PropertyDetailModal({
                         <button
                           type="button"
                           onClick={handleToggleHide}
-                          disabled={isHiding}
+                          disabled={isUpdating}
                           className="flex-shrink-0 rounded-lg p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300 transition-colors disabled:opacity-50"
                         >
                           {isHidden ? (
