@@ -252,13 +252,13 @@ export function PreferencesSidebar() {
 function PropertyCard({
   property,
   isHidden = false,
-  onCardClick
+  onCardClick,
 }: {
   property: PropertyData;
   isHidden?: boolean;
   onCardClick: () => void;
 }) {
-  const { refreshPreferences } = usePreferences();
+  const { updatePreferences, currentThreadId } = usePreferences();
   const [isRemoving, setIsRemoving] = useState(false);
 
   const formatPrice = (price: number) => {
@@ -275,23 +275,30 @@ function PropertyCard({
 
   const handleRemove = async (e: React.MouseEvent) => {
     e.stopPropagation();
+
+    if (!currentThreadId) {
+      console.error('No thread ID available');
+      return;
+    }
+
     setIsRemoving(true);
 
     try {
-      const endpoint = isHidden
-        ? `/langgraph/preferences/hidden/${property.code}`
-        : `/langgraph/preferences/favorites/${property.code}`;
+      const success = await updatePreferences(() => {
+        const endpoint = isHidden
+          ? `/langgraph/preferences/hidden/${property.code}?thread_id=${encodeURIComponent(currentThreadId)}`
+          : `/langgraph/preferences/favorites/${property.code}?thread_id=${encodeURIComponent(currentThreadId)}`;
 
-      const response = await fetch(endpoint, {
-        method: 'DELETE',
-        credentials: 'include',
+        return fetch(endpoint, {
+          method: 'DELETE',
+          credentials: 'include',
+        });
       });
 
-      if (response.ok) {
-        // Refresh preferences to update UI
-        await refreshPreferences();
+      if (success) {
+        console.log('[REMOVE] ✅ Successfully removed property');
       } else {
-        console.error('Failed to remove property:', await response.text());
+        console.error('[REMOVE] ❌ Failed to remove property');
       }
     } catch (error) {
       console.error('Error removing property:', error);

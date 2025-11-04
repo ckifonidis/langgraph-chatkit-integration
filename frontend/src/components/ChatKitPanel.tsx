@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { ChatKit, useChatKit } from "@openai/chatkit-react";
+import { ChatKit, useChatKit } from "../chatkit-react";
 import {
   CHATKIT_API_URL,
   CHATKIT_API_DOMAIN_KEY,
@@ -23,7 +23,7 @@ export function ChatKitPanel({
   const [selectedProperty, setSelectedProperty] = useState<any | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
-  const { refreshPreferences, setCurrentThreadId: setPreferencesThreadId } = usePreferences();
+  const { refreshPreferences, setCurrentThreadId: setPreferencesThreadId, registerThreadReload } = usePreferences();
 
   const chatkit = useChatKit({
     api: { url: CHATKIT_API_URL, domainKey: CHATKIT_API_DOMAIN_KEY },
@@ -107,6 +107,28 @@ export function ChatKitPanel({
     },
   });
 
+  // Handler to reload current thread items
+  const handleThreadReload = async () => {
+    console.log('[THREAD-RELOAD] handleThreadReload called');
+
+    if (!chatkit.fetchUpdates) {
+      console.error('[THREAD-RELOAD] chatkit.fetchUpdates is not available!');
+      return;
+    }
+
+    try {
+      await chatkit.fetchUpdates();
+      console.log('[THREAD-RELOAD] ✅ Thread items refreshed');
+    } catch (error) {
+      console.error('[THREAD-RELOAD] Error refreshing thread items:', error);
+    }
+  };
+
+  // Register thread reload function with preferences context
+  useEffect(() => {
+    registerThreadReload(handleThreadReload);
+  }, [registerThreadReload, handleThreadReload]);
+
   return (
     <>
       <div className="relative h-full w-full overflow-hidden border border-slate-200/60 bg-white shadow-card dark:border-slate-800/70 dark:bg-slate-900">
@@ -115,9 +137,11 @@ export function ChatKitPanel({
 
       <PropertyDetailModal
         isOpen={isModalOpen}
-        onClose={() => {
+        onClose={async () => {
           setIsModalOpen(false);
           setSelectedProperty(null);
+          // Reload thread items after modal closes to reflect any preference changes
+          await handleThreadReload();
         }}
         property={selectedProperty}
       />

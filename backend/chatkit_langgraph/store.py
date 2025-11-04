@@ -129,6 +129,155 @@ class MemoryStore(Store[dict[str, Any]]):
             self._threads[thread_id] = state
         return state.items
 
+    def _apply_preferences_to_widgets(
+        self,
+        items: List[ThreadItem],
+        user_preferences: Dict[str, Any]
+    ) -> List[ThreadItem]:
+        """
+        Apply current user preferences to historical widget items.
+
+        Filters out hidden properties from ListView widgets and updates
+        favorite indicators to reflect current preference state.
+
+        Args:
+            items: List of thread items (may include WidgetItem objects)
+            user_preferences: User preferences dict with 'favorites' and 'hidden'
+
+        Returns:
+            Filtered list of items with updated widgets
+        """
+        from chatkit.types import WidgetItem
+        from chatkit.widgets import ListView
+
+        hidden = set(user_preferences.get('hidden', {}).keys())
+        favorites = set(user_preferences.get('favorites', {}).keys())
+
+        if not hidden and not favorites:
+            return items  # No filtering needed
+
+        filtered_items = []
+
+        for item in items:
+            # Only process WidgetItem objects with ListView widgets
+            if isinstance(item, WidgetItem) and isinstance(item.widget, ListView):
+                filtered_widget = self._filter_listview_widget(
+                    item.widget,
+                    hidden,
+                    favorites
+                )
+                # Only include if widget has items after filtering
+                if filtered_widget and filtered_widget.children:
+                    # Create new WidgetItem with only the attributes that exist
+                    new_item = WidgetItem(
+                        id=item.id,
+                        thread_id=item.thread_id,
+                        created_at=item.created_at,
+                        widget=filtered_widget
+                    )
+                    # Copy status if it exists (may not be present on all WidgetItem instances)
+                    if hasattr(item, 'status'):
+                        new_item.status = item.status
+                    filtered_items.append(new_item)
+            else:
+                # Keep all non-ListView items unchanged
+                filtered_items.append(item)
+
+        return filtered_items
+
+    def _filter_listview_widget(
+        self,
+        listview: Any,
+        hidden: set,
+        favorites: set
+    ) -> Any:
+        """
+        Filter ListView widget to remove hidden properties and update favorite icons.
+
+        Args:
+            listview: ListView widget instance
+            hidden: Set of hidden property codes
+            favorites: Set of favorited property codes
+
+        Returns:
+            New ListView with filtered items, or None if all items filtered
+        """
+        from chatkit.widgets import ListView, ListViewItem, Icon
+
+        if not hasattr(listview, 'children') or not listview.children:
+            return listview
+
+        filtered_children = []
+
+        for child in listview.children:
+            if not isinstance(child, ListViewItem):
+                filtered_children.append(child)
+                continue
+
+            # Extract property code from onClickAction payload
+            property_code = None
+            if hasattr(child, 'onClickAction') and child.onClickAction:
+                payload = getattr(child.onClickAction, 'payload', {})
+                if isinstance(payload, dict):
+                    item_data = payload.get('item_data', {})
+                    if isinstance(item_data, dict):
+                        property_code = item_data.get('code')
+
+            # Skip hidden properties
+            if property_code and property_code in hidden:
+                continue
+
+            # Update favorite indicator
+            if property_code and hasattr(child, 'children'):
+                updated_children = []
+                has_star = False
+
+                for item_child in child.children:
+                    # Check if this is a star icon
+                    if isinstance(item_child, Icon) and hasattr(item_child, 'name'):
+                        if item_child.name in ('star-filled', 'star'):
+                            has_star = True
+                            # Update icon based on current favorite status
+                            if property_code in favorites:
+                                updated_children.append(Icon(
+                                    name='star-filled',
+                                    size='md',
+                                    color={'light': '#FFA500', 'dark': '#FFB800'}
+                                ))
+                            # If not favorited, skip (remove the icon)
+                        else:
+                            updated_children.append(item_child)
+                    else:
+                        updated_children.append(item_child)
+
+                # If property is favorited but no star exists, add one at the end
+                if property_code in favorites and not has_star:
+                    updated_children.append(Icon(
+                        name='star-filled',
+                        size='md',
+                        color={'light': '#FFA500', 'dark': '#FFB800'}
+                    ))
+
+                # Create updated ListViewItem
+                filtered_children.append(ListViewItem(
+                    key=child.key,
+                    gap=child.gap,
+                    align=child.align,
+                    onClickAction=child.onClickAction,
+                    children=updated_children
+                ))
+            else:
+                filtered_children.append(child)
+
+        # Return new ListView with filtered children
+        if not filtered_children:
+            return None
+
+        return ListView(
+            children=filtered_children,
+            limit=getattr(listview, 'limit', None)
+        )
+
     async def load_thread_items(
         self,
         thread_id: str,
@@ -138,6 +287,13 @@ class MemoryStore(Store[dict[str, Any]]):
         context: dict[str, Any],
     ) -> Page[ThreadItem]:
         items = [item.model_copy(deep=True) for item in self._items(thread_id)]
+
+        # Apply user preferences to historical widgets
+        user_id = context.get("user_id", "anonymous")
+        user_preferences = self.get_preferences(user_id, thread_id)
+        if user_preferences:
+            items = self._apply_preferences_to_widgets(items, user_preferences)
+
         items.sort(
             key=lambda item: getattr(item, "created_at", datetime.utcnow()),
             reverse=(order == "desc"),

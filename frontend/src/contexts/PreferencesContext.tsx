@@ -29,6 +29,8 @@ interface PreferencesContextType {
   currentThreadId: string | null;
   setCurrentThreadId: (threadId: string | null) => void;
   refreshPreferences: (threadId?: string) => Promise<void>;
+  registerThreadReload: (callback: () => Promise<void>) => void;
+  updatePreferences: (apiCall: () => Promise<Response>) => Promise<boolean>;
 }
 
 const PreferencesContext = createContext<PreferencesContextType | undefined>(undefined);
@@ -46,6 +48,7 @@ export function PreferencesProvider({ children }: PreferencesProviderProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
+  const [threadReloadCallback, setThreadReloadCallback] = useState<(() => Promise<void>) | null>(null);
 
   const refreshPreferences = async (threadId?: string) => {
     // Use provided threadId or current one
@@ -81,6 +84,39 @@ export function PreferencesProvider({ children }: PreferencesProviderProps) {
     }
   };
 
+  // Register callback for thread reload (called by ChatKitPanel)
+  const registerThreadReload = (callback: () => Promise<void>) => {
+    setThreadReloadCallback(() => callback);
+  };
+
+  // Centralized preference update handler
+  // Executes API call, refreshes preferences, triggers thread reload
+  const updatePreferences = async (apiCall: () => Promise<Response>): Promise<boolean> => {
+    try {
+      const response = await apiCall();
+
+      if (response.ok) {
+        // Wait for preferences to refresh
+        await refreshPreferences();
+
+        // Small delay to ensure state propagation
+        await new Promise(resolve => setTimeout(resolve, 100));
+
+        // Trigger thread reload if callback registered
+        if (threadReloadCallback) {
+          await threadReloadCallback();
+        }
+
+        return true;
+      }
+
+      return false;
+    } catch (error) {
+      console.error('Error updating preferences:', error);
+      return false;
+    }
+  };
+
   // Refresh preferences when thread changes
   useEffect(() => {
     if (currentThreadId) {
@@ -95,6 +131,8 @@ export function PreferencesProvider({ children }: PreferencesProviderProps) {
     currentThreadId,
     setCurrentThreadId,
     refreshPreferences,
+    registerThreadReload,
+    updatePreferences,
   };
 
   return (

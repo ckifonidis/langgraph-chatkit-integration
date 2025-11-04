@@ -172,7 +172,7 @@ export function PropertyDetailModal({
   property,
 }: PropertyDetailModalProps) {
   const [mapsLoaded, setMapsLoaded] = useState(false);
-  const { preferences, refreshPreferences, currentThreadId } = usePreferences();
+  const { preferences, updatePreferences, currentThreadId } = usePreferences();
   const [isTogglingFavorite, setIsTogglingFavorite] = useState(false);
   const [isHiding, setIsHiding] = useState(false);
   const mapInstanceRef = useRef<any>(null);
@@ -193,34 +193,38 @@ export function PropertyDetailModal({
   const handleToggleFavorite = async () => {
     if (!property?.code || !currentThreadId) return;
 
+    console.log('[FAVORITE] Toggle clicked, isFavorited:', isFavorited, 'property:', property.code);
+
     setIsTogglingFavorite(true);
     try {
-      if (isFavorited) {
-        // Remove from favorites
-        const response = await fetch(`/langgraph/preferences/favorites/${property.code}?thread_id=${encodeURIComponent(currentThreadId)}`, {
-          method: 'DELETE',
-          credentials: 'include',
-        });
-        if (response.ok) {
-          await refreshPreferences();
+      const success = await updatePreferences(() => {
+        if (isFavorited) {
+          // Remove from favorites
+          console.log('[FAVORITE] Removing from favorites...');
+          return fetch(`/langgraph/preferences/favorites/${property.code}?thread_id=${encodeURIComponent(currentThreadId)}`, {
+            method: 'DELETE',
+            credentials: 'include',
+          });
+        } else {
+          // Add to favorites
+          console.log('[FAVORITE] Adding to favorites...');
+          return fetch('/langgraph/preferences/favorites', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              thread_id: currentThreadId,
+              propertyCode: property.code,
+              propertyData: property,
+            }),
+          });
         }
+      });
+
+      if (success) {
+        console.log('[FAVORITE] ✅ Successfully updated favorites');
       } else {
-        // Add to favorites
-        const response = await fetch('/langgraph/preferences/favorites', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            thread_id: currentThreadId,
-            propertyCode: property.code,
-            propertyData: property,
-          }),
-        });
-        if (response.ok) {
-          await refreshPreferences();
-        }
+        console.error('[FAVORITE] ❌ Failed to update favorites');
       }
     } catch (error) {
       console.error('Error toggling favorite:', error);
@@ -235,32 +239,32 @@ export function PropertyDetailModal({
 
     setIsHiding(true);
     try {
-      if (isHidden) {
-        // Unhide property
-        const response = await fetch(`/langgraph/preferences/hidden/${property.code}?thread_id=${encodeURIComponent(currentThreadId)}`, {
-          method: 'DELETE',
-          credentials: 'include',
-        });
-        if (response.ok) {
-          await refreshPreferences();
+      const success = await updatePreferences(() => {
+        if (isHidden) {
+          // Unhide property
+          return fetch(`/langgraph/preferences/hidden/${property.code}?thread_id=${encodeURIComponent(currentThreadId)}`, {
+            method: 'DELETE',
+            credentials: 'include',
+          });
+        } else {
+          // Hide property
+          return fetch('/langgraph/preferences/hidden', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
+            body: JSON.stringify({
+              thread_id: currentThreadId,
+              propertyCode: property.code,
+              propertyData: property,
+            }),
+          });
         }
+      });
+
+      if (success) {
+        console.log('[HIDE] ✅ Successfully updated hidden properties');
       } else {
-        // Hide property
-        const response = await fetch('/langgraph/preferences/hidden', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          credentials: 'include',
-          body: JSON.stringify({
-            thread_id: currentThreadId,
-            propertyCode: property.code,
-            propertyData: property,
-          }),
-        });
-        if (response.ok) {
-          await refreshPreferences();
-        }
+        console.error('[HIDE] ❌ Failed to update hidden properties');
       }
     } catch (error) {
       console.error('Error toggling hide:', error);

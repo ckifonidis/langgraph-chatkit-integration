@@ -177,71 +177,117 @@ PropertyCarouselComponent activates when response contains `query_results` array
 
 ## User Preferences System
 
-The application includes a user preferences system that allows users to favorite and hide properties. Preferences are stored per-user session and persist for the session duration.
+The application includes a user preferences system that allows users to favorite and hide properties. Preferences are stored per-thread and persist for the session duration. **Preferences are applied retroactively to all historical data**, meaning hidden properties are immediately removed from past search results and favorite icons update in real-time across all carousels.
 
 ### Architecture
 
 **Storage (`backend/chatkit_langgraph/store.py`):**
-- Preferences stored in `MemoryStore._preferences` dict: `{user_id: {favorites: [], hidden: [], version: 1}}`
-- Methods: `get_preferences()`, `add_favorite()`, `remove_favorite()`, `hide_property()`, `unhide_property()`
+- Preferences stored in `MemoryStore._preferences` dict: `{user_id: {thread_id: {favorites: {}, hidden: {}, version: 3}}}`
+- Thread-specific preferences (version 3 schema) - each thread maintains its own favorites/hidden list
+- Methods: `get_preferences(user_id, thread_id)`, `add_favorite()`, `remove_favorite()`, `hide_property()`, `unhide_property()`
+- **Historical filtering**: `_apply_preferences_to_widgets()` filters ListView widgets during `load_thread_items()`
+- **Real-time updates**: `_filter_listview_widget()` removes hidden properties and updates favorite icons in historical carousels
 
-**UI Components (`backend/custom_components/widgets.py`):**
-- `create_favorite_button()` - Star icon button (filled when favorited)
-- `create_hide_button()` - Eye-slash icon button
-- Both buttons emit server-side actions (no handler specified, defaults to server)
+**UI Components:**
+- **Backend** (`backend/custom_components/widgets.py`): `create_favorite_button()`, `create_hide_button()` - Deprecated, widgets now use static indicators
+- **Frontend** (`frontend/src/components/PropertyDetailModal.tsx`): Modal with favorite/hide buttons that trigger REST API calls
+- Both actions trigger immediate thread reload via `onThreadReload()` callback
 
-**Action Handling (`backend/chatkit_langgraph/server.py`):**
-- `action()` method handles `toggle_favorite` and `hide_property` actions
-- Updates preferences silently (no immediate UI re-render)
-- Preferences are applied on next property search/query
+**Action Handling:**
+- **Server-Side** (`backend/chatkit_langgraph/server.py`): `action()` method handles widget actions (legacy, rarely used)
+- **REST API** (`backend/app/main.py`): Direct HTTP endpoints for preferences updates
+  - `POST /langgraph/preferences/favorites` - Add favorite
+  - `DELETE /langgraph/preferences/favorites/{code}` - Remove favorite
+  - `POST /langgraph/preferences/hidden` - Hide property
+  - `DELETE /langgraph/preferences/hidden/{code}` - Unhide property
+- **Thread Reload** (`frontend/src/components/ChatKitPanel.tsx`): `chatkit.fetchUpdates()` refetches thread items after preference changes
 
 ### How It Works
 
-**1. User Clicks Favorite Button:**
+**1. User Clicks Favorite Button (Modal):**
 ```
-User clicks star → toggle_favorite action → server.action()
+User clicks star in PropertyDetailModal
                  ↓
-         Updates MemoryStore preferences
+         POST /langgraph/preferences/favorites
                  ↓
-         No immediate response (silent update)
+         MemoryStore.add_favorite(user_id, property_code, property_data, thread_id)
                  ↓
-         Next search uses updated preferences
+         refreshPreferences() → updates sidebar
+                 ↓
+         onThreadReload() → chatkit.fetchUpdates()
+                 ↓
+         Server calls load_thread_items()
+                 ↓
+         _apply_preferences_to_widgets() filters historical widgets
+                 ↓
+         ✨ Star icons appear on ALL property carousels instantly
 ```
 
-**2. Filtering Properties:**
+**2. User Hides Property (Modal):**
+```
+User clicks hide button in PropertyDetailModal
+                 ↓
+         POST /langgraph/preferences/hidden
+                 ↓
+         MemoryStore.hide_property(user_id, property_code, property_data, thread_id)
+                 ↓
+         refreshPreferences() → updates sidebar
+                 ↓
+         onThreadReload() → chatkit.fetchUpdates()
+                 ↓
+         Server calls load_thread_items()
+                 ↓
+         _apply_preferences_to_widgets() filters historical widgets
+                 ↓
+         _filter_listview_widget() removes hidden properties
+                 ↓
+         ✨ Property disappears from ALL carousels instantly
+```
+
+**3. Historical Data Filtering (Server-Side):**
 ```python
-# In property_carousel.py render() method:
-properties = response_data.get("query_results", [])
+# store.py load_thread_items() method
+async def load_thread_items(...):
+    items = [item.model_copy(deep=True) for item in self._items(thread_id)]
 
-# Filter out hidden properties
-if user_preferences:
-    hidden = user_preferences.get('hidden', [])
-    if hidden:
-        properties = [
-            prop for prop in properties
-            if prop.get('code') not in hidden
-        ]
-
-# Display favorite status
-favorites = user_preferences.get('favorites', [])
-# Used to show filled/unfilled star icons
-```
-
-**3. Server-Side Flow:**
-```python
-# server.py action() method
-async def action(...) -> AsyncIterator[ThreadStreamEvent]:
+    # Apply current preferences to historical widgets
     user_id = context.get("user_id", "anonymous")
+    user_preferences = self.get_preferences(user_id, thread_id)
+    if user_preferences:
+        items = self._apply_preferences_to_widgets(items, user_preferences)
 
-    if action.type == "toggle_favorite":
-        property_code = action.payload.get("propertyCode")
-        prefs = self.store.get_preferences(user_id)
-        if property_code in prefs['favorites']:
-            self.store.remove_favorite(user_id, property_code)
-        else:
-            self.store.add_favorite(user_id, property_code)
+    # Returns filtered items - hidden properties removed, favorite icons updated
+    return Page(data=slice_items, ...)
+```
 
-    # No events yielded - silent update
+**4. Widget Filtering Logic:**
+```python
+# store.py _filter_listview_widget() method
+def _filter_listview_widget(listview, hidden, favorites):
+    filtered_children = []
+
+    for child in listview.children:
+        # Extract property code from widget payload
+        property_code = child.onClickAction.payload['item_data']['code']
+
+        # Skip hidden properties
+        if property_code in hidden:
+            continue
+
+        # Update favorite icon based on current preferences
+        updated_children = []
+        for item_child in child.children:
+            if isinstance(item_child, Icon) and item_child.name in ('star-filled', 'star'):
+                # Show filled star if favorited, hide if not
+                if property_code in favorites:
+                    updated_children.append(Icon(name='star-filled', ...))
+                # else: skip (don't show unfilled star)
+            else:
+                updated_children.append(item_child)
+
+        filtered_children.append(ListViewItem(..., children=updated_children))
+
+    return ListView(children=filtered_children, ...)
 ```
 
 ### Implementation Details
