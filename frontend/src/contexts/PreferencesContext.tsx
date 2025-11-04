@@ -35,6 +35,7 @@ interface PreferencesContextType {
   setCurrentThreadId: (threadId: string | null) => void;
   refreshPreferences: (threadId?: string) => Promise<void>;
   registerThreadReload: (callback: () => Promise<void>) => void;
+  triggerThreadReload: () => Promise<void>;
   updatePreferences: (
     apiCall: () => Promise<Response>,
     options?: UpdatePreferencesOptions
@@ -99,6 +100,15 @@ export function PreferencesProvider({ children }: PreferencesProviderProps) {
     threadReloadRef.current = callback;
   }, []);
 
+  // Trigger thread reload (can be called from any component)
+  const triggerThreadReload = useCallback(async () => {
+    if (threadReloadRef.current) {
+      await threadReloadRef.current();
+    } else {
+      console.warn('[PreferencesContext] triggerThreadReload called but no callback registered');
+    }
+  }, []);
+
   // Centralized preference update handler
   // Executes API call, refreshes preferences, optionally triggers thread reload
   const updatePreferences = async (
@@ -144,6 +154,7 @@ export function PreferencesProvider({ children }: PreferencesProviderProps) {
     setCurrentThreadId,
     refreshPreferences,
     registerThreadReload,
+    triggerThreadReload,
     updatePreferences,
   };
 

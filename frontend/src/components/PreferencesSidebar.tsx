@@ -26,7 +26,7 @@ interface PropertyData {
 }
 
 export function PreferencesSidebar() {
-  const { preferences, loading, currentThreadId, refreshPreferences } = usePreferences();
+  const { preferences, loading, currentThreadId, refreshPreferences, triggerThreadReload } = usePreferences();
   const [isExpanded, setIsExpanded] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<PropertyData | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -240,9 +240,11 @@ export function PreferencesSidebar() {
       {/* Property Detail Modal */}
       <PropertyDetailModal
         isOpen={isModalOpen}
-        onClose={() => {
+        onClose={async () => {
           setIsModalOpen(false);
           setSelectedProperty(null);
+          // Reload thread items after modal closes to reflect any preference changes
+          await triggerThreadReload();
         }}
         property={selectedProperty}
       />
