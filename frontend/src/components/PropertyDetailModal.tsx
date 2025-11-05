@@ -68,6 +68,7 @@ interface PropertyData {
   parkingSpace?: number;
   storageArea?: number;
   storageType?: string[];
+  coveredVeranda?: number;
   masterRoom?: number;
   renovationYear?: number;
   neighborhood?: string;
@@ -164,6 +165,12 @@ function formatParkingType(types?: string[]): string | null {
     Other: "Other",
   };
   return types.map(t => parkingMap[t] || t).join(", ");
+}
+
+// Helper function to format storage type
+function formatStorageType(types?: string[]): string | null {
+  if (!types || types.length === 0) return null;
+  return types.filter(Boolean).join(", ");
 }
 
 export function PropertyDetailModal({
@@ -698,6 +705,9 @@ export function PropertyDetailModal({
                       {(displayProperty.basementSize ?? 0) > 0 && (
                         <DetailRow label="Basement" value={`${displayProperty.basementSize}m²`} />
                       )}
+                      {(displayProperty.coveredVeranda ?? 0) > 0 && (
+                        <DetailRow label="Covered Veranda" value={`${displayProperty.coveredVeranda}m²`} />
+                      )}
                       {(displayProperty.numberOfFloors ?? 0) > 0 && (
                         <DetailRow label="Number of Floors" value={displayProperty.numberOfFloors.toString()} />
                       )}
@@ -714,7 +724,8 @@ export function PropertyDetailModal({
                   {(
                     (displayProperty.parkingType && displayProperty.parkingType.length > 0) ||
                     (displayProperty.parkingSpace ?? 0) > 0 ||
-                    (displayProperty.storageArea ?? 0) > 0
+                    (displayProperty.storageArea ?? 0) > 0 ||
+                    (displayProperty.storageType && displayProperty.storageType.length > 0)
                   ) && (
                     <Section title="🚗 Parking & Storage" className="mb-6">
                       <div className="bg-slate-50 dark:bg-slate-800 rounded-lg p-4 border border-slate-200 dark:border-slate-700">
@@ -742,10 +753,20 @@ export function PropertyDetailModal({
                           {(displayProperty.storageArea ?? 0) > 0 && (
                             <div className="flex items-center gap-2">
                               <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
-                                Storage:
+                                Storage Area:
                               </span>
                               <span className="text-sm text-slate-900 dark:text-slate-100 font-semibold">
                                 {displayProperty.storageArea}m²
+                              </span>
+                            </div>
+                          )}
+                          {displayProperty.storageType && displayProperty.storageType.length > 0 && (
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-slate-600 dark:text-slate-400">
+                                Storage Type:
+                              </span>
+                              <span className="text-sm text-slate-900 dark:text-slate-100 font-semibold">
+                                {formatStorageType(displayProperty.storageType)}
                               </span>
                             </div>
                           )}

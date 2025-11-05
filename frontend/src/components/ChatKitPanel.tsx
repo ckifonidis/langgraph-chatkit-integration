@@ -25,12 +25,10 @@ export function ChatKitPanel({
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null);
   const { refreshPreferences, setCurrentThreadId: setPreferencesThreadId, registerThreadReload } = usePreferences();
 
-  // Throttle + debounce refs for thread reload
-  const lastReloadRef = useRef<number>(0);
-  const pendingReloadRef = useRef<NodeJS.Timeout | null>(null);
-  const isReloadingRef = useRef<boolean>(false);  // Prevent parallel reloads
-  const RELOAD_THROTTLE_MS = 2000;  // ChatKit requires 2s minimum between calls
-  const RELOAD_DEBOUNCE_MS = 300;   // Group rapid actions together
+  // Queue-based reload system for ChatKit's 6-second throttle
+  const needsReloadRef = useRef(false);
+  const lastReloadAttemptRef = useRef(0);
+  const CHATKIT_THROTTLE_MS = 6000;  // ChatKit throttles to 1 request per 6 seconds
 
   const chatkit = useChatKit({
     api: { url: CHATKIT_API_URL, domainKey: CHATKIT_API_DOMAIN_KEY },
@@ -75,7 +73,7 @@ export function ChatKitPanel({
         // Handle property detail modal (client-side only)
         if (action.type === "view_item_details") {
           const propertyData = action.payload?.item_data;
-          if (propertyData) {
+          if (propertyData && typeof propertyData === 'object' && 'code' in propertyData) {
             console.log("[DEBUG] Opening property modal - Thread ID:", currentThreadId, "Property:", propertyData.code);
             setSelectedProperty(propertyData);
             setIsModalOpen(true);
@@ -86,7 +84,7 @@ export function ChatKitPanel({
         // Handle carousel item clicks
         if (action.type === "carousel_item_click" || action.type === "open_link") {
           const linkUrl = action.payload?.link_url;
-          if (linkUrl) {
+          if (linkUrl && typeof linkUrl === 'string') {
             window.open(linkUrl, "_blank", "noopener,noreferrer");
             return;
           }
@@ -114,70 +112,53 @@ export function ChatKitPanel({
     },
   });
 
-  // Execute the actual reload with throttle enforcement and in-flight tracking
+  // Execute actual reload - respects 6s throttle and auto-queues if needed
   const executeReload = async () => {
-    // Prevent parallel reloads
-    if (isReloadingRef.current) {
-      console.log('[THREAD-RELOAD] Already reloading, skipping duplicate call');
-      return;
-    }
-
-    const now = Date.now();
-    const timeSinceLastReload = now - lastReloadRef.current;
-
-    // Enforce 2s minimum between calls
-    if (timeSinceLastReload < RELOAD_THROTTLE_MS) {
-      const waitTime = RELOAD_THROTTLE_MS - timeSinceLastReload;
-      console.log(`[THREAD-RELOAD] Throttle enforced, waiting ${waitTime}ms`);
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-    }
-
-    isReloadingRef.current = true;
-    lastReloadRef.current = Date.now();
-    console.log('[THREAD-RELOAD] Executing reload');
+    needsReloadRef.current = false;
+    lastReloadAttemptRef.current = Date.now();
 
     try {
       if (!chatkit.fetchUpdates) {
         console.error('[THREAD-RELOAD] chatkit.fetchUpdates not available');
         return;
       }
+
       await chatkit.fetchUpdates();
-      console.log('[THREAD-RELOAD] ✅ Thread items refreshed');
+      console.log('[THREAD-RELOAD] ✅ Reload completed');
+
+      // If actions occurred during reload, schedule another reload in 6s
+      if (needsReloadRef.current) {
+        console.log('[THREAD-RELOAD] More actions detected, scheduling next reload in 6s');
+        setTimeout(() => executeReload(), CHATKIT_THROTTLE_MS);
+      }
     } catch (error) {
-      console.error('[THREAD-RELOAD] Error refreshing thread items:', error);
-    } finally {
-      isReloadingRef.current = false;
+      console.error('[THREAD-RELOAD] Error during reload:', error);
     }
   };
 
-  // Debounce entry point - called by modal onClose handlers
+  // Handle reload request - schedules intelligently based on last attempt
   const handleThreadReload = async () => {
-    // Clear existing pending reload
-    if (pendingReloadRef.current) {
-      clearTimeout(pendingReloadRef.current);
-    }
+    needsReloadRef.current = true;
 
-    // Debounce: wait for user to stop acting
-    pendingReloadRef.current = setTimeout(() => {
+    const now = Date.now();
+    const timeSinceLastAttempt = now - lastReloadAttemptRef.current;
+
+    if (timeSinceLastAttempt >= CHATKIT_THROTTLE_MS) {
+      // Been 6s+ since last attempt, fire immediately
+      console.log('[THREAD-RELOAD] Firing immediately (6s elapsed)');
       executeReload();
-    }, RELOAD_DEBOUNCE_MS);
-
-    console.log(`[THREAD-RELOAD] Reload scheduled in ${RELOAD_DEBOUNCE_MS}ms`);
+    } else {
+      // Schedule for 6s after last attempt
+      const delay = CHATKIT_THROTTLE_MS - timeSinceLastAttempt;
+      console.log(`[THREAD-RELOAD] Scheduling in ${Math.round(delay/1000)}s`);
+      setTimeout(() => executeReload(), delay);
+    }
   };
 
   // Register thread reload function with preferences context
   useEffect(() => {
     registerThreadReload(handleThreadReload);
   }, [registerThreadReload, handleThreadReload]);
-
-  // Cleanup pending reload timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (pendingReloadRef.current) {
-        clearTimeout(pendingReloadRef.current);
-      }
-    };
-  }, []);
 
   return (
     <>
@@ -191,7 +172,6 @@ export function ChatKitPanel({
           setIsModalOpen(false);
           setSelectedProperty(null);
           // Reload thread items after modal closes to reflect any preference changes
-          // Modal actions use skipThreadReload=true, so refresh happens only once here
           await handleThreadReload();
         }}
         property={selectedProperty}

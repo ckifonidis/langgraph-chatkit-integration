@@ -1,0 +1,712 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Property Listing",
+  "description": "Schema representing a comprehensive property listing object with all property information and metadata.",
+  "type": "object",
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Globally unique identifier (UUID) for the listing record in the system.",
+      "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+    },
+    "code": {
+      "type": "string",
+      "description": "Human-readable internal code identifying the listing within the platform."
+    },
+    "price": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Current asking price in currency units for the entire property."
+    },
+    "floor": {
+      "type": "integer",
+      "description": "Numeric floor level of the unit within the building."
+    },
+    "propertyArea": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Total interior built area of the unit measured in square meters."
+    },
+    "description": {
+      "type": "string",
+      "description": "Free-text listing description written by agents or system editors."
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "Apartment",
+        "Maisonette",
+        "Studio",
+        "Land"
+      ],
+      "description": "Specific property subtype, e.g., Apartment, Maisonette, Studio, or Land.",
+      "uniqueValues": [
+        "Apartment",
+        "DetachedHouse",
+        "Maisonette",
+        "ResidentialBuilding",
+        "Studio",
+        "Villa"
+      ]
+    },
+    "viewCount": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Cumulative count of listing views recorded by the platform."
+    },
+    "title": {
+      "type": "string",
+      "description": "Public listing title combining area, size, and location details."
+    },
+    "isSold": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the property has been sold and is no longer available.",
+      "uniqueValues": [
+        "False",
+        "True"
+      ]
+    },
+    "isPromoted": {
+      "type": "boolean",
+      "default": false,
+      "description": "Promotion flag indicating enhanced visibility due to paid or internal boosting.",
+      "uniqueValues": [
+        "False"
+      ]
+    },
+    "isFavorite": {
+      "type": "boolean",
+      "default": false,
+      "description": "User-level flag indicating listing is saved to favorites by a viewer.",
+      "uniqueValues": [
+        "False"
+      ]
+    },
+    "isHot": {
+      "type": "boolean",
+      "default": false,
+      "description": "Internal marketing flag marking listing as hot or trending.",
+      "uniqueValues": [
+        "False"
+      ]
+    },
+    "isSponsored": {
+      "type": "boolean",
+      "default": false,
+      "description": "Flag indicating sponsored placement or paid advertising status.",
+      "uniqueValues": [
+        "False"
+      ]
+    },
+    "isExclusive": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether the listing is under exclusive representation agreement.",
+      "uniqueValues": [
+        "False",
+        "True"
+      ]
+    },
+    "defaultImagePath": {
+      "type": "string",
+      "format": "uri",
+      "description": "URL of the primary image used in listing cards or detail pages."
+    },
+    "lastModified": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when listing data was last updated in the system."
+    },
+    "createdOn": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Timestamp when the listing record was first created."
+    },
+    "numberOfFloors": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Number of floors in the building or structure containing the unit."
+    },
+    "numberOfRooms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Total number of rooms defined for the property listing.",
+      "uniqueValues": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ]
+    },
+    "numberOfBathrooms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Count of bathrooms excluding separate WC rooms.",
+      "uniqueValues": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ]
+    },
+    "numberOfWC": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Count of separate WC rooms distinct from full bathrooms.",
+      "uniqueValues": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ]
+    },
+    "masterRoom": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of master bedrooms typically featuring en-suite bathroom facilities.",
+      "uniqueValues": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6"
+      ]
+    },
+    "constructionYear": {
+      "type": "integer",
+      "minimum": 1800,
+      "maximum": 2050,
+      "description": "Year the building or main structure was originally constructed."
+    },
+    "renovationYear": {
+      "type": "integer",
+      "minimum": 1800,
+      "maximum": 2050,
+      "description": "Calendar year of most recent renovation or substantial refurbishment."
+    },
+    "publishedStatus": {
+      "type": "string",
+      "enum": [
+        "Processing",
+        "Published",
+        "Archived"
+      ],
+      "description": "Publication workflow status, e.g., processing, published, or archived.",
+      "uniqueValues": [
+        "Processing"
+      ]
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of labels for categorization, marketing, or filtering purposes.",
+      "uniqueValues": [
+        "Πάνω στο κύμα",
+        "Πολυτελείς Κατοικίες",
+        "Πράσινο/Ενεργειακό"
+      ]
+    },
+    "amenities": {
+      "type": "object",
+      "description": "Grouped boolean flags indicating specific property features and conveniences available to occupants.",
+      "properties": {
+        "hasElevator": {
+          "type": "boolean",
+          "description": "Whether the building includes an elevator providing vertical access between floors.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "hasAlarm": {
+          "type": "boolean",
+          "description": "Whether a security alarm system is installed or supported on the property.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "hasSafetyDoor": {
+          "type": "boolean",
+          "description": "Whether the main door is reinforced or certified as a safety/security door.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "accessibilityForDisabled": {
+          "type": "boolean",
+          "description": "Whether access and facilities are suitable for people with mobility impairments.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "hasGarden": {
+          "type": "boolean",
+          "description": "Whether the property includes a private or shared garden or green area.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "hasPool": {
+          "type": "boolean",
+          "description": "Whether a swimming pool is present within the property or common areas.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "internalStaircase": {
+          "type": "boolean",
+          "description": "Whether the unit has an internal staircase connecting its private levels.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "hasBoiler": {
+          "type": "boolean",
+          "description": "Presence of a central or autonomous boiler for water or space heating.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "hasNightElectricCurrent": {
+          "type": "boolean",
+          "description": "Availability of reduced night-rate electric meter or corresponding supply capability.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "hasPlayroom": {
+          "type": "boolean",
+          "description": "Whether a dedicated playroom or recreation room exists within the property.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "hasSolarWaterHeating": {
+          "type": "boolean",
+          "description": "Presence of solar thermal water heater or roof-mounted solar boiler installation.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "hasStorageRoom": {
+          "type": "boolean",
+          "description": "Whether a dedicated storage room, often in basement or auxiliary area.",
+          "uniqueValues": [
+            "True"
+          ]
+        },
+        "hasTents": {
+          "type": "boolean",
+          "description": "Whether retractable awnings or shading tents are installed on balconies or terraces.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "isAiry": {
+          "type": "boolean",
+          "description": "Indicates cross-ventilation or multiple aspects that enable better airflow inside.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "isBright": {
+          "type": "boolean",
+          "description": "Indicates good natural light due to exposure, windows, or orientation.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "isFloorApartment": {
+          "type": "boolean",
+          "description": "Whether the unit occupies an entire floor without neighboring same-level units.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "isPenthouse": {
+          "type": "boolean",
+          "description": "Whether the unit is a top-floor penthouse, often with exclusive terrace access.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "petsAreAllowed": {
+          "type": "boolean",
+          "description": "Whether pets are permitted according to building rules or owner preference.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "sieves": {
+          "type": "boolean",
+          "description": "Internal flag from source system; denotes specific feature, likely shading or screening elements.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "suitableForProfessionalUse": {
+          "type": "boolean",
+          "description": "Whether zoning or layout makes the property suitable for professional use.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        },
+        "suitableForTouristUse": {
+          "type": "boolean",
+          "description": "Whether layout and regulations allow use for short-term or tourist rentals.",
+          "uniqueValues": [
+            "False",
+            "True"
+          ]
+        }
+      }
+    },
+    "address": {
+      "type": "object",
+      "description": "Container for geographical address attributes and geocoding data.",
+      "properties": {
+        "country": {
+          "type": "string",
+          "description": "Country component of the address for the property location.",
+          "uniqueValues": [
+            "",
+            "Greece",
+            "Ελλάδα"
+          ]
+        },
+        "prefecture": {
+          "type": "string",
+          "description": "Prefecture, municipality, or locality as stored in the source system."
+        },
+        "postalCode": {
+          "type": "string",
+          "description": "Postal or ZIP code associated with the property address."
+        },
+        "geoPoint": {
+          "type": "string",
+          "pattern": "^-?\\d+\\.\\d+,-?\\d+\\.\\d+$",
+          "description": "Latitude and longitude pair encoded as a comma-separated string."
+        },
+        "administrativeAreas": {
+          "type": "string",
+          "description": "Administrative areas field captured from listing data; purpose varies by context and usage.",
+          "uniqueValues": [
+            "Kentrikos Tomeas Athinon",
+            "Pireas",
+            "Vorios Tomeas Athinon",
+            "Κεντρικός Τομέας Αθηνών",
+            "Νότιος Τομέας Αθηνών",
+            "Περιφερειακή Ενότητα Δυτικού Τομέα Αθηνών",
+            "Περιφερειακή Ενότητα Πειραιώς",
+            "Περιφερειακή ενότητα Ανατολικής Αττικής",
+            "Περιφερειακή ενότητα Βορείου Τομέα Αθηνών"
+          ]
+        }
+      }
+    },
+    "defaultPhoto": {
+      "type": "object",
+      "description": "Container for the default media object and its metadata fields.",
+      "properties": {
+        "mediaGuid": {
+          "type": "string",
+          "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
+          "description": "Unique identifier for the media asset within the media store."
+        },
+        "isDefault": {
+          "type": "boolean",
+          "description": "Whether this media item is the designated default photo for display.",
+          "uniqueValues": [
+            "True"
+          ]
+        },
+        "uri": {
+          "type": "string",
+          "format": "uri",
+          "description": "Primary URL pointing to the media resource used by clients."
+        },
+        "fallbackUri": {
+          "type": "string",
+          "format": "uri",
+          "description": "Backup URL served when the primary media resource is unavailable."
+        },
+        "altText": {
+          "type": "string",
+          "description": "Alternative text describing the media for accessibility and SEO."
+        },
+        "order": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Display order index used for sorting media within galleries."
+        },
+        "type": {
+          "type": "string",
+          "description": "Specific property subtype, e.g., Apartment, Maisonette, Studio, or Land.",
+          "uniqueValues": [
+            "Photos"
+          ]
+        },
+        "photoItems": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Photo items field captured from listing data; purpose varies by context and usage."
+        }
+      }
+    },
+    "basementSize": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Basement area in square meters allocated to the unit or property."
+    },
+    "ownershipPercentage": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Percentage of ownership share held relative to the entire property."
+    },
+    "ownershipType": {
+      "type": "string",
+      "enum": [
+        "Full",
+        "Usufruct",
+        "Bare Ownership"
+      ],
+      "description": "Ownership form, e.g., full, usufruct, bare ownership, or similar.",
+      "uniqueValues": [
+        "Full"
+      ]
+    },
+    "propertyUsageCategory": {
+      "type": "string",
+      "enum": [
+        "Residential",
+        "Commercial",
+        "Land",
+        "Industrial"
+      ],
+      "description": "High-level usage type, e.g., Residential, Commercial, Land, or Industrial.",
+      "uniqueValues": [
+        "Commercial",
+        "Industrial",
+        "Land",
+        "Other",
+        "Residential"
+      ]
+    },
+    "residentialZone": {
+      "type": "boolean",
+      "description": "Indicates if the property lies within a designated residential zoning area.",
+      "uniqueValues": [
+        "False",
+        "True"
+      ]
+    },
+    "parkingSpace": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Count of parking spaces included or allocated to the property.",
+      "uniqueValues": [
+        "0",
+        "1",
+        "2",
+        "3",
+        "4",
+        "6"
+      ]
+    },
+    "parkingType": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of parking types provided, e.g., open, closed, shared, or underground.",
+      "uniqueValues": [
+        "Closed",
+        "Open",
+        "Other",
+        "Shared",
+        "Underground"
+      ]
+    },
+    "storageArea": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Auxiliary storage area size in square meters, if defined."
+    },
+    "storageType": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List describing storage provisions, e.g., attic, basement, built-in closets."
+    },
+    "plotArea": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Total land plot size in square meters associated with the listing."
+    },
+    "coveredVeranda": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Covered veranda field captured from listing data; purpose varies by context and usage.",
+      "uniqueValues": [
+        "9.5"
+      ]
+    },
+    "frames": {
+      "type": "string",
+      "description": "Window or door frame material, e.g., aluminum, PVC, or wooden.",
+      "uniqueValues": [
+        "aluminum",
+        "other",
+        "wood",
+        "wooden"
+      ]
+    },
+    "constructionMaterial": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of construction materials used, as structured or free-form values."
+    },
+    "floorMaterial": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of flooring materials present, e.g., tile, wooden, marble.",
+      "uniqueValues": [
+        "Carpet",
+        "Laminate",
+        "Marble",
+        "Tile",
+        "Wooden"
+      ]
+    },
+    "energyClass": {
+      "type": "string",
+      "description": "Energy performance class according to local certification scheme.",
+      "uniqueValues": [
+        "APlus",
+        "A",
+        "BPlus",
+        "B",
+        "C",
+        "D",
+        "E",
+        "F",
+        "G",
+        "0"
+      ]
+    },
+    "heatingControl": {
+      "type": "string",
+      "description": "Heating control scheme, e.g., central building control or autonomous unit control.",
+      "uniqueValues": [
+        "Autonomous",
+        "Central"
+      ]
+    },
+    "heatingType": {
+      "type": "string",
+      "description": "Primary heating source or system type, e.g., gas, oil, heat pump.",
+      "uniqueValues": [
+        "ElectricAirConditioning",
+        "HeatPump",
+        "HeatingOil",
+        "NaturalGas",
+        "OtherHeating"
+      ]
+    },
+    "previousPrice": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Most recent previous asking price before the latest change."
+    },
+    "preApprovalAmmount": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Pre approval amount field captured from listing data; purpose varies by context and usage."
+    },
+    "preApproved": {
+      "type": "boolean",
+      "description": "Pre approved field captured from listing data; purpose varies by context and usage.",
+      "uniqueValues": [
+        "Approved"
+      ]
+    },
+    "kaek": {
+      "type": "string",
+      "description": "Greek land registry identifier (KAEK) for parcels or units."
+    },
+    "externalCode": {
+      "type": "string",
+      "description": "External code field captured from listing data; purpose varies by context and usage."
+    },
+    "neighborhood": {
+      "type": "string",
+      "description": "Narrative neighborhood context or description provided by editors."
+    },
+    "availability": {
+      "type": "string",
+      "description": "Current availability status, e.g., vacant, rented, or unknown.",
+      "uniqueValues": [
+        "Rented",
+        "Unknown",
+        "UsedByOwner",
+        "Vacant"
+      ]
+    },
+    "auctionDateTime": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Auction start date and time in ISO 8601 format where applicable."
+    },
+    "auctionRound": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Numeric auction round index when multiple rounds are scheduled.",
+      "uniqueValues": [
+        "1",
+        "2",
+        "3"
+      ]
+    }
+  },
+  "required": [
+    "id"
+  ],
+  "additionalProperties": false
+}

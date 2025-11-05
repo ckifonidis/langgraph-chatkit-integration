@@ -59,9 +59,13 @@ class DescriptionLangGraphClient:
         """
         Transform property data to match the description API's expected format.
 
-        Main transformation: Convert GeoJSON geoPoint to string format.
-        - From: {"type": "Point", "coordinates": [lng, lat]}
-        - To: "lat,lng"
+        Transformations:
+        1. Convert GeoJSON geoPoint to string format.
+           - From: {"type": "Point", "coordinates": [lng, lat]}
+           - To: "lat,lng"
+        2. Convert string boolean fields to actual booleans.
+           - From: "Approved", "True", "False"
+           - To: true, false
         """
         # Create a deep copy to avoid mutating the original
         import copy
@@ -78,6 +82,36 @@ class DescriptionLangGraphClient:
                     lng, lat = coords
                     # Convert to string format: "latitude,longitude"
                     transformed["address"]["geoPoint"] = f"{lat},{lng}"
+
+        # Convert string boolean fields to actual booleans
+        # These fields are defined as boolean in the API schema but may contain string values
+        boolean_fields = [
+            "preApproved",
+            "isSold",
+            "isPromoted",
+            "isExclusive",
+            "isFavorite",
+            "isHot",
+            "isSponsored",
+            "residentialZone",
+        ]
+
+        for field in boolean_fields:
+            if field in transformed:
+                value = transformed[field]
+                if isinstance(value, str):
+                    # Convert string to boolean
+                    # "Approved", "True", "true", "yes", "1" → True
+                    # Everything else → False
+                    transformed[field] = value.strip().lower() in (
+                        "approved",
+                        "true",
+                        "yes",
+                        "1",
+                    )
+                elif not isinstance(value, bool):
+                    # None, numbers, etc. → False
+                    transformed[field] = False
 
         return transformed
 

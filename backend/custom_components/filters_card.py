@@ -1,21 +1,22 @@
 """
-FiltersCardComponent - Displays active search filters as a styled card with badges.
+FiltersCardComponent - Displays active search filters as pill-shaped chips.
 
 This component renders when LangGraph returns selected_filters in the response.
 """
 
 from typing import Any
 
-from chatkit.widgets import Badge, Box, Card, Col, Row, Spacer, Title
+from chatkit.actions import ActionConfig
+from chatkit.widgets import Box, Button, Card, Row, Text
 
 from .base import CustomComponent
 
 
 class FiltersCardComponent(CustomComponent):
     """
-    Renders a card displaying active search filters with badges.
+    Renders a card displaying active search filters as pill-shaped chips.
 
-    Shows a summary line plus individual filter badges for each criterion.
+    Each filter appears as a rounded pill with a remove button.
     Activates when selected_filters array exists in the response.
     """
 
@@ -42,55 +43,58 @@ class FiltersCardComponent(CustomComponent):
         user_preferences: dict[str, Any] | None = None,
     ) -> Card | None:
         """
-        Render the filters card with badges.
+        Render the filters card with pill-shaped chips.
 
         Args:
             response_data: LangGraph response containing selected_filters
             user_preferences: User preferences (not used)
 
         Returns:
-            Card widget with filter badges, or None if no filters
+            Card widget with filter pills, or None if no filters
         """
         selected_filters = response_data.get("selected_filters", [])
 
         if not selected_filters:
             return None
 
-        # Build individual filter badges using filter_explanation from LangGraph
-        filter_badges = []
+        # Build individual filter pills with X buttons
+        filter_pills = []
         for f in selected_filters:
             explanation = f.get("filter_explanation", "Unknown filter")
-            filter_badges.append(
-                Badge(
-                    label=explanation,
-                    color="secondary",
-                    variant="soft",
+            filter_pills.append(
+                Box(
+                    border=1,
+                    radius="full",
+                    padding={"x": 2, "y": 1},
+                    background="surface",
+                    children=[
+                        Row(
+                            gap=2,
+                            align="center",
+                            children=[
+                                Text(value=explanation, size="sm"),
+                                Button(
+                                    label="×",
+                                    size="sm",
+                                    variant="soft",
+                                    color="secondary",
+                                    uniform=True,
+                                    onClickAction=ActionConfig(
+                                        type="remove_filter",
+                                        payload={"filter_name": explanation},
+                                    ),
+                                ),
+                            ],
+                        )
+                    ],
                 )
             )
 
-        # Build card content
-        children = [
-            # Header row with title and count badge
-            Row(
-                align="center",
-                children=[
-                    Title(value="Filters applied", size="sm"),
-                    Spacer(),
-                    Badge(
-                        label=str(len(selected_filters)),
-                        color="info",
-                        variant="soft",
-                    ),
-                ],
-            ),
-        ]
-
-        # Add filter badges in wrapped row
-        children.append(
-            Box(direction="row", wrap="wrap", gap=2, children=filter_badges)
+        return Card(
+            size="sm",
+            padding=2,
+            children=[Box(direction="row", wrap="wrap", gap=2, children=filter_pills)],
         )
-
-        return Card(size="sm", children=[Col(gap=3, children=children)])
 
     def get_priority(self) -> int:
         """

@@ -694,6 +694,19 @@ class LangGraphChatKitServer(ChatKitServer[dict[str, Any]]):
                 # Preferences will be used on next search/query in this thread
                 print(f"[DEBUG] Updated thread preferences: {len(self.store.get_preferences(user_id, thread_id).get('hidden', {}))} hidden")
 
+        # Handle remove_filter action
+        elif action.type == "remove_filter":
+            filter_name = action.payload.get("filter_name")
+            if filter_name:
+                logger.info(f"Removing filter '{filter_name}' for user {user_id[:8]} in thread {thread_id}")
+
+                # Construct query to remove the filter - use clear intent for LLM
+                query = f"remove filter {filter_name}"
+
+                # Send query to LangGraph and stream results back
+                async for event in self._handle_with_langgraph(query, thread, context):
+                    yield event
+
     async def to_message_content(
         self, _input: Attachment
     ) -> ResponseInputContentParam:

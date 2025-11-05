@@ -26,7 +26,7 @@ export const STARTER_PROMPTS: StartScreenPrompt[] = [
   },
   {
     label: "Properties under €200,000",
-    prompt: "Find apartments under €200,000",
+    prompt: "Find appartments under €200,000",
     icon: "sparkle",
   },
   {
@@ -35,8 +35,8 @@ export const STARTER_PROMPTS: StartScreenPrompt[] = [
     icon: "maps",
   },
   {
-    label: "Buying process help",
-    prompt: "How does the property buying process work with Uniko?",
+    label: "Find family friendly appartments in Athens",
+    prompt: "Show me properties with 3 bedrooms and 2 baths in Athens",
     icon: "circle-question",
   },
 ];
